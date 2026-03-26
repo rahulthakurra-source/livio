@@ -12,7 +12,10 @@ function requireEnv(name) {
 
 export const config = {
   port: Number(process.env.PORT || 4000),
-  frontendOrigin: process.env.FRONTEND_ORIGIN || "http://localhost:5173",
+  frontendOrigins: (process.env.FRONTEND_ORIGIN || "http://localhost:5173,http://localhost:5500,http://127.0.0.1:5500,null")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
   supabaseUrl: requireEnv("SUPABASE_URL"),
   supabaseServiceRoleKey: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
 };

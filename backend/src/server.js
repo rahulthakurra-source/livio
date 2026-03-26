@@ -23,9 +23,27 @@ import {
 
 const app = express();
 
+function isAllowedOrigin(origin) {
+  if (!origin) {
+    return true;
+  }
+
+  if (config.frontendOrigins.includes("*")) {
+    return true;
+  }
+
+  return config.frontendOrigins.includes(origin);
+}
+
 app.use(
   cors({
-    origin: config.frontendOrigin,
+    origin(origin, callback) {
+      if (isAllowedOrigin(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`Origin not allowed by CORS: ${origin}`));
+    },
     credentials: false,
   }),
 );
