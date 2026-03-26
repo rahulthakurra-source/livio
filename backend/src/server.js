@@ -7,13 +7,17 @@ import {
   deleteProject,
   getProjectById,
   listProjects,
+  replaceProjects,
   updateProject,
 } from "./projectStore.js";
+import { getAppState, saveAppState } from "./appStateStore.js";
 import {
   createUser,
   deleteUser,
   listUsers,
+  listUsersRaw,
   loginUser,
+  replaceUsers,
   updateUser,
 } from "./userStore.js";
 
@@ -46,6 +50,63 @@ app.post("/api/auth/login", async (req, res, next) => {
     return res.json({ user });
   } catch (error) {
     return next(error);
+  }
+});
+
+app.get("/api/bootstrap", async (_req, res, next) => {
+  try {
+    const [projects, users, appState] = await Promise.all([
+      listProjects(),
+      listUsersRaw(),
+      getAppState(),
+    ]);
+
+    res.json({
+      db: {
+        projects,
+        activeId: appState.activeId || projects[0]?.id || "",
+      },
+      users,
+      roles: appState.roles || [],
+      perms: appState.perms || {},
+      resets: appState.resets || {},
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/bootstrap", async (req, res, next) => {
+  try {
+    const payload = req.body || {};
+    const db = payload.db && typeof payload.db === "object" ? payload.db : {};
+    const projects = Array.isArray(db.projects) ? db.projects : [];
+    const activeId = typeof db.activeId === "string" ? db.activeId : "";
+    const users = Array.isArray(payload.users) ? payload.users : [];
+
+    const [savedProjects, savedUsers, savedAppState] = await Promise.all([
+      replaceProjects(projects),
+      replaceUsers(users),
+      saveAppState({
+        activeId,
+        roles: payload.roles,
+        perms: payload.perms,
+        resets: payload.resets,
+      }),
+    ]);
+
+    res.json({
+      db: {
+        projects: savedProjects,
+        activeId: savedAppState.activeId || savedProjects[0]?.id || "",
+      },
+      users: savedUsers,
+      roles: savedAppState.roles,
+      perms: savedAppState.perms,
+      resets: savedAppState.resets,
+    });
+  } catch (error) {
+    next(error);
   }
 });
 

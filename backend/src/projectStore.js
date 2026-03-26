@@ -204,6 +204,46 @@ export async function deleteProject(projectId) {
   }
 }
 
+export async function replaceProjects(projects = []) {
+  const nextProjects = Array.isArray(projects) ? projects : [];
+  const nextRows = nextProjects.map(projectToRow);
+
+  const { data: existing, error: existingError } = await supabase
+    .from(PROJECTS_TABLE)
+    .select("id");
+
+  if (existingError) {
+    throw existingError;
+  }
+
+  const nextIds = nextRows.map((row) => row.id);
+  const existingIds = (existing || []).map((row) => row.id);
+  const deleteIds = existingIds.filter((id) => !nextIds.includes(id));
+
+  if (deleteIds.length) {
+    const { error: deleteError } = await supabase
+      .from(PROJECTS_TABLE)
+      .delete()
+      .in("id", deleteIds);
+
+    if (deleteError) {
+      throw deleteError;
+    }
+  }
+
+  if (nextRows.length) {
+    const { error: upsertError } = await supabase
+      .from(PROJECTS_TABLE)
+      .upsert(nextRows);
+
+    if (upsertError) {
+      throw upsertError;
+    }
+  }
+
+  return listProjects();
+}
+
 export function createEmptyProject(seed = {}) {
   const split = splitProject({
     ...PROJECT_DATA_DEFAULTS,

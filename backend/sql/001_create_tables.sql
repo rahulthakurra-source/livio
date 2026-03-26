@@ -18,6 +18,12 @@ create table if not exists projects (
 
 create index if not exists projects_updated_at_idx on projects (updated_at desc);
 
+create table if not exists app_state (
+  id text primary key,
+  payload jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists app_users (
   id text primary key,
   username text unique not null,
