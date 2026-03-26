@@ -11,6 +11,7 @@ const PROJECT_DATA_DEFAULTS = {
   inspections: [],
   invoices: [],
   vendors: [],
+  clientContracts: [],
   checklist: [],
   qaqcLog: [],
   chkCategories: [],
