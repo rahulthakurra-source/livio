@@ -1,6 +1,18 @@
 import cors from "cors";
 import express from "express";
+import multer from "multer";
+import {
+  buildClientInvoiceEmail,
+  buildClientInvoiceFilename,
+  buildClientInvoicePdf,
+} from "./clientInvoiceDocument.js";
+import {
+  createAttachment,
+  deleteAttachmentById,
+  downloadAttachment,
+} from "./attachmentStore.js";
 import { config } from "./config.js";
+import { isEmailConfigured, sendClientInvoiceEmail } from "./emailClient.js";
 import {
   createEmptyProject,
   createProject,
@@ -22,17 +34,27 @@ import {
 } from "./userStore.js";
 
 const app = express();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024,
+  },
+});
+
+function getClientInvoicePayload(body = {}) {
+  const project = body.project && typeof body.project === "object" ? body.project : {};
+  const invoice = body.invoice && typeof body.invoice === "object" ? body.invoice : {};
+  const contract = body.contract && typeof body.contract === "object" ? body.contract : {};
+
+  if (!invoice || (!invoice.id && !invoice.invoiceNo)) {
+    throw new Error("Client invoice payload is required.");
+  }
+
+  return { project, invoice, contract };
+}
 
 function isAllowedOrigin(origin) {
-  if (!origin) {
-    return true;
-  }
-
-  if (config.frontendOrigins.includes("*")) {
-    return true;
-  }
-
-  return config.frontendOrigins.includes(origin);
+  return true;
 }
 
 app.use(
@@ -125,6 +147,97 @@ app.put("/api/bootstrap", async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+});
+
+app.post("/api/client-invoices/pdf", async (req, res, next) => {
+  try {
+    const payload = getClientInvoicePayload(req.body);
+    const pdfBytes = await buildClientInvoicePdf(payload);
+    const filename = buildClientInvoiceFilename(payload);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(Buffer.from(pdfBytes));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/client-invoices/email", async (req, res, next) => {
+  try {
+    if (!isEmailConfigured()) {
+      return res.status(400).json({
+        error: "SMTP is not configured on the backend. Add SMTP settings on Render first.",
+      });
+    }
+
+    const payload = getClientInvoicePayload(req.body);
+    const to = String(payload.invoice.clientEmail || payload.contract.clientEmail || "").trim();
+    if (!to) {
+      return res.status(400).json({ error: "Client email is required for invoice sending." });
+    }
+
+    const pdfBytes = await buildClientInvoicePdf(payload);
+    const filename = buildClientInvoiceFilename(payload);
+    const message = buildClientInvoiceEmail(payload);
+
+    await sendClientInvoiceEmail({
+      to,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+      pdfBytes,
+      filename,
+    });
+
+    return res.json({ ok: true, to });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/api/attachments/upload", upload.single("file"), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "Attachment file is required." });
+    }
+
+    const attachment = await createAttachment({
+      projectId: String(req.body?.projectId || "").trim(),
+      fileName: req.file.originalname,
+      contentType: req.file.mimetype,
+      size: req.file.size,
+      buffer: req.file.buffer,
+    });
+
+    return res.status(201).json({ attachment });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/api/attachments/:attachmentId/download", async (req, res, next) => {
+  try {
+    const { attachment, buffer } = await downloadAttachment(req.params.attachmentId);
+    res.setHeader("Content-Type", attachment.contentType || "application/octet-stream");
+    res.setHeader("Content-Length", String(buffer.length));
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${String(attachment.name || "file").replace(/"/g, "")}"`,
+    );
+    return res.send(buffer);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.delete("/api/attachments/:attachmentId", async (req, res, next) => {
+  try {
+    await deleteAttachmentById(req.params.attachmentId);
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
   }
 });
 
