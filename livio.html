@@ -1316,6 +1316,8 @@ const APP_STATE = {
   resets: {}
 };
 const AUTH_SESSION_KEY = 'livio_auth_session_v1';
+const AUTH_SESSION_COOKIE = 'livio_auth_session_v1';
+const AUTH_SESSION_MAX_AGE = 60*60*24*30;
 let CURRENT_USER = null;
 
 let supabaseClient = null;
@@ -1329,17 +1331,53 @@ function normalizeAuthSession(value){
   if(!id||!username||!role) return null;
   return {id,username,role};
 }
+function readCookie(name){
+  try{
+    const match=document.cookie.match(new RegExp('(?:^|; )'+name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'=([^;]*)'));
+    return match?decodeURIComponent(match[1]):'';
+  }catch(_e){
+    return '';
+  }
+}
+function writeAuthSessionCookie(value){
+  try{
+    const encoded=value?encodeURIComponent(JSON.stringify(value)):'';
+    const maxAge=value?'; max-age='+AUTH_SESSION_MAX_AGE:'; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    document.cookie=AUTH_SESSION_COOKIE+'='+encoded+maxAge+'; path=/; SameSite=Lax';
+  }catch(_e){}
+}
 function persistCurrentUser(){
   try{
-    if(CURRENT_USER) localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(CURRENT_USER));
-    else localStorage.removeItem(AUTH_SESSION_KEY);
+    if(CURRENT_USER){
+      const payload=JSON.stringify(CURRENT_USER);
+      localStorage.setItem(AUTH_SESSION_KEY, payload);
+      sessionStorage.setItem(AUTH_SESSION_KEY, payload);
+      writeAuthSessionCookie(CURRENT_USER);
+    }else{
+      localStorage.removeItem(AUTH_SESSION_KEY);
+      sessionStorage.removeItem(AUTH_SESSION_KEY);
+      writeAuthSessionCookie(null);
+    }
   }catch(_e){}
 }
 function restoreCurrentUser(){
   try{
-    const raw=localStorage.getItem(AUTH_SESSION_KEY);
-    if(!raw) return null;
-    return normalizeAuthSession(JSON.parse(raw));
+    const sources=[
+      ()=>localStorage.getItem(AUTH_SESSION_KEY),
+      ()=>sessionStorage.getItem(AUTH_SESSION_KEY),
+      ()=>readCookie(AUTH_SESSION_COOKIE)
+    ];
+    for(const getRaw of sources){
+      const raw=getRaw();
+      if(!raw) continue;
+      const parsed=normalizeAuthSession(JSON.parse(raw));
+      if(parsed){
+        CURRENT_USER=parsed;
+        persistCurrentUser();
+        return parsed;
+      }
+    }
+    return null;
   }catch(_e){
     return null;
   }
@@ -1366,11 +1404,13 @@ function applyCurrentUserUI(shouldRender=false){
 function reconcileCurrentUser(){
   if(!CURRENT_USER) return;
   const users=Array.isArray(APP_STATE.users)?APP_STATE.users:[];
+  if(!users.length){
+    persistCurrentUser();
+    return;
+  }
   const match=users.find(u=>u.id===CURRENT_USER.id)||users.find(u=>u.username===CURRENT_USER.username);
   if(!match){
-    CURRENT_USER=null;
     persistCurrentUser();
-    applyCurrentUserUI(false);
     return;
   }
   CURRENT_USER={
@@ -1557,6 +1597,10 @@ function applyAppSnapshot(snapshot){
 async function fetchUsersFromSupabase(){
   const data=await backendRequest('/bootstrap');
   return ((data&&data.users)||[]).map(normalizeUserRecord);
+}
+function findCachedUserLogin(username, password){
+  const user=(Array.isArray(APP_STATE.users)?APP_STATE.users:[]).find(u=>u.username===username&&u.password===password);
+  return user?{id:user.id,username:user.username,role:user.role}:null;
 }
 async function testSupabaseConnection(){
   const client=initSupabaseClient(true);
@@ -5950,17 +5994,39 @@ async function doLogin(){
   if(!user||!pass){if(errEl){errEl.style.display='';errEl.textContent='Please enter username and password.';}return;}
   if(loginBtn){loginBtn.disabled=true;loginBtn.textContent='Signing In...';loginBtn.style.opacity='.8';}
   try{
-    const data=await backendRequest('/auth/login',{
+    const cached=findCachedUserLogin(user, pass);
+    const data=cached?null:await backendRequest('/auth/login',{
       method:'POST',
       body:JSON.stringify({username:user,password:pass})
     });
-    const found=data&&data.user;
+    const found=cached||(data&&data.user);
     if(!found) throw new Error('Invalid username or password.');
     CURRENT_USER={id:found.id,username:found.username,role:found.role};
     persistCurrentUser();
     applyCurrentUserUI(false);
     if(errEl) errEl.style.display='none';
     requestAnimationFrame(()=>nav('projects'));
+    if(cached){
+      backendRequest('/auth/login',{
+        method:'POST',
+        body:JSON.stringify({username:user,password:pass})
+      }).then(remote=>{
+        const remoteUser=remote&&remote.user;
+        if(!remoteUser) throw new Error('Invalid username or password.');
+        CURRENT_USER={id:remoteUser.id,username:remoteUser.username,role:remoteUser.role};
+        persistCurrentUser();
+        applyCurrentUserUI(false);
+      }).catch(error=>{
+        console.error('doLogin background verify error:',error);
+        CURRENT_USER=null;
+        persistCurrentUser();
+        applyCurrentUserUI(false);
+        if(errEl){
+          errEl.style.display='';
+          errEl.textContent=error&&error.message?error.message:'Login failed.';
+        }
+      });
+    }
   }catch(e){
     console.error('doLogin backend error:',e);
     if(errEl){errEl.style.display='';errEl.textContent=e&&e.message?e.message:'Login failed.';}
