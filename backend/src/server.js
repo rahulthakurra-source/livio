@@ -328,7 +328,11 @@ app.delete("/api/users/:userId", async (req, res, next) => {
 
 app.use((error, _req, res, _next) => {
   console.error(error);
-  res.status(500).json({
+  const status =
+    (error && Number(error.statusCode || error.status)) ||
+    (error && error.code === "LIMIT_FILE_SIZE" ? 413 : 500);
+
+  res.status(status).json({
     error: error.message || "Unexpected server error.",
   });
 });

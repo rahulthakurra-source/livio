@@ -3,6 +3,12 @@ import { config } from "./config.js";
 import { supabase } from "./supabaseClient.js";
 
 const ATTACHMENTS_TABLE = "attachments";
+const ATTACHMENT_BUCKET_OPTIONS = {
+  public: false,
+  fileSizeLimit: 200 * 1024 * 1024,
+  allowedMimeTypes: null,
+};
+let attachmentBucketReadyPromise = null;
 
 function sanitizeSegment(value) {
   return String(value || "")
@@ -30,6 +36,60 @@ function buildStoragePath(projectId, fileName) {
   return `${safeProject}/${Date.now()}_${randomUUID()}_${safeName}`;
 }
 
+async function ensureAttachmentBucket() {
+  if (!attachmentBucketReadyPromise) {
+    attachmentBucketReadyPromise = (async () => {
+      const { data: bucket, error: getBucketError } = await supabase.storage.getBucket(
+        config.attachmentBucket,
+      );
+
+      if (getBucketError) {
+        const notFound =
+          getBucketError.statusCode === 404 ||
+          /not found/i.test(String(getBucketError.message || ""));
+
+        if (!notFound) {
+          throw getBucketError;
+        }
+
+        const { error: createBucketError } = await supabase.storage.createBucket(
+          config.attachmentBucket,
+          ATTACHMENT_BUCKET_OPTIONS,
+        );
+
+        if (createBucketError) {
+          throw createBucketError;
+        }
+
+        return;
+      }
+
+      const needsUpdate =
+        bucket?.public !== ATTACHMENT_BUCKET_OPTIONS.public ||
+        Number(bucket?.file_size_limit || 0) !== ATTACHMENT_BUCKET_OPTIONS.fileSizeLimit ||
+        Array.isArray(bucket?.allowed_mime_types);
+
+      if (!needsUpdate) {
+        return;
+      }
+
+      const { error: updateBucketError } = await supabase.storage.updateBucket(
+        config.attachmentBucket,
+        ATTACHMENT_BUCKET_OPTIONS,
+      );
+
+      if (updateBucketError) {
+        throw updateBucketError;
+      }
+    })().catch((error) => {
+      attachmentBucketReadyPromise = null;
+      throw error;
+    });
+  }
+
+  return attachmentBucketReadyPromise;
+}
+
 export async function createAttachment({
   projectId = "",
   fileName,
@@ -37,6 +97,8 @@ export async function createAttachment({
   size,
   buffer,
 }) {
+  await ensureAttachmentBucket();
+
   const id = `att_${randomUUID()}`;
   const storagePath = buildStoragePath(projectId, fileName);
 

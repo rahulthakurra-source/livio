@@ -37,7 +37,7 @@ values (
   'project-files',
   false,
   209715200,
-  array['application/pdf', 'image/png', 'image/jpeg', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+  null
 )
 on conflict (id) do update
 set
