@@ -133,6 +133,15 @@ function projectToRow(project) {
   };
 }
 
+function createProjectConflictError(message, project) {
+  const error = new Error(message);
+  error.statusCode = 409;
+  if (project) {
+    error.project = project;
+  }
+  return error;
+}
+
 export async function listProjects() {
   const { data, error } = await supabase
     .from(PROJECTS_TABLE)
@@ -175,21 +184,39 @@ export async function createProject(project) {
   return rowToProject(data);
 }
 
-export async function updateProject(projectId, project) {
+export async function updateProject(projectId, project, options = {}) {
+  const expectedUpdatedAt =
+    options && typeof options.expectedUpdatedAt === "string"
+      ? options.expectedUpdatedAt.trim()
+      : "";
   const row = projectToRow({
     ...project,
     id: projectId,
   });
 
-  const { data, error } = await supabase
-    .from(PROJECTS_TABLE)
-    .update(row)
-    .eq("id", projectId)
-    .select("*")
-    .single();
+  let query = supabase.from(PROJECTS_TABLE).update(row).eq("id", projectId);
+  if (expectedUpdatedAt) {
+    query = query.eq("updated_at", expectedUpdatedAt);
+  }
+
+  const { data, error } = await query.select("*").maybeSingle();
 
   if (error) {
     throw error;
+  }
+
+  if (!data) {
+    const latestProject = await getProjectById(projectId).catch(() => null);
+    if (latestProject) {
+      throw createProjectConflictError(
+        "This project was updated by someone else. Reload the latest project before saving again.",
+        latestProject,
+      );
+    }
+
+    const notFoundError = new Error("Project not found.");
+    notFoundError.statusCode = 404;
+    throw notFoundError;
   }
 
   return rowToProject(data);

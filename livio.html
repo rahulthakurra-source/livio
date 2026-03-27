@@ -1273,6 +1273,8 @@ function saveDB(){
     console.error('saveDB error:',e);
   }
   registerAllFiles();
+  const activeProjectId=proj()?.id||DB.activeId||'';
+  if(activeProjectId) syncProjectToSupabase(activeProjectId,true);
   scheduleSupabasePush();
 }
 function registerAllFiles(){
@@ -1318,10 +1320,14 @@ const APP_STATE = {
 const AUTH_SESSION_KEY = 'livio_auth_session_v1';
 const AUTH_SESSION_COOKIE = 'livio_auth_session_v1';
 const AUTH_SESSION_MAX_AGE = 60*60*24*30;
+const AUTH_SYNC_KEY = 'livio_auth_sync_v1';
 let CURRENT_USER = null;
 
 let supabaseClient = null;
 let supabasePushTimer = null;
+let projectSyncChain = Promise.resolve();
+const REMOTE_PROJECT_IDS = new Set();
+let authChannel = null;
 
 function normalizeAuthSession(value){
   if(!value||typeof value!=='object') return null;
@@ -1357,6 +1363,51 @@ function persistCurrentUser(){
       localStorage.removeItem(AUTH_SESSION_KEY);
       sessionStorage.removeItem(AUTH_SESSION_KEY);
       writeAuthSessionCookie(null);
+    }
+  }catch(_e){}
+}
+function notifyAuthTabs(type){
+  try{
+    const payload=JSON.stringify({type,ts:Date.now()});
+    localStorage.setItem(AUTH_SYNC_KEY, payload);
+  }catch(_e){}
+  try{
+    if(typeof BroadcastChannel==='function'){
+      if(!authChannel) authChannel=new BroadcastChannel(AUTH_SYNC_KEY);
+      authChannel.postMessage({type,ts:Date.now()});
+    }
+  }catch(_e){}
+}
+function applyLoggedOutState(fromSync=false){
+  CURRENT_USER=null;
+  persistCurrentUser();
+  applyCurrentUserUI();
+  const ue=document.getElementById('login-user');const pe=document.getElementById('login-pass');
+  if(ue){ue.value='';setTimeout(()=>ue.focus(),100);}
+  if(pe)pe.value='';
+  const errEl=document.getElementById('login-error');
+  if(errEl) errEl.style.display='none';
+  if(fromSync) toast('Logged out in another tab');
+}
+function bindCrossTabAuth(){
+  window.addEventListener('storage',event=>{
+    if(event.key===AUTH_SESSION_KEY&&event.newValue===null&&CURRENT_USER){
+      applyLoggedOutState(true);
+      return;
+    }
+    if(event.key===AUTH_SYNC_KEY&&CURRENT_USER){
+      try{
+        const payload=event.newValue?JSON.parse(event.newValue):null;
+        if(payload&&payload.type==='logout') applyLoggedOutState(true);
+      }catch(_e){}
+    }
+  });
+  try{
+    if(typeof BroadcastChannel==='function'){
+      if(!authChannel) authChannel=new BroadcastChannel(AUTH_SYNC_KEY);
+      authChannel.addEventListener('message',event=>{
+        if(event?.data?.type==='logout'&&CURRENT_USER) applyLoggedOutState(true);
+      });
     }
   }catch(_e){}
 }
@@ -1487,7 +1538,8 @@ async function backendRequest(path, options={}){
   const res=await fetch(client.baseUrl+path,{
     method:options.method||'GET',
     headers,
-    body:options.body
+    body:options.body,
+    keepalive:!!options.keepalive
   });
   const text=await res.text();
   let data=null;
@@ -1496,7 +1548,10 @@ async function backendRequest(path, options={}){
     catch(_e){ data=text; }
   }
   if(!res.ok){
-    throw new Error((data&&data.error)||('Request failed ('+res.status+')'));
+    const error=new Error((data&&data.error)||('Request failed ('+res.status+')'));
+    error.status=res.status;
+    error.data=data;
+    throw error;
   }
   return data;
 }
@@ -1566,8 +1621,133 @@ function defaultAppSnapshot(){
     resets:{}
   };
 }
+function setRemoteProjectIds(projects){
+  REMOTE_PROJECT_IDS.clear();
+  (projects||[]).forEach(project=>{
+    if(project&&project.id) REMOTE_PROJECT_IDS.add(project.id);
+  });
+}
+function upsertLocalProject(project){
+  if(!project||!project.id) return;
+  const normalized=normalizeDB({projects:[project],activeId:project.id}).projects[0];
+  const idx=(DB.projects||[]).findIndex(x=>x.id===normalized.id);
+  if(idx>-1) DB.projects[idx]=normalized;
+  else DB.projects.push(normalized);
+  REMOTE_PROJECT_IDS.add(normalized.id);
+  return normalized;
+}
+function applyRemoteProject(project, shouldRender=false){
+  const normalized=upsertLocalProject(project);
+  if(!normalized) return null;
+  registerAllFiles();
+  if(shouldRender&&CURRENT_USER&&((DB.activeId||'')===normalized.id||!DB.activeId)){
+    if(!DB.activeId) DB.activeId=normalized.id;
+    renderAll();
+  }
+  return normalized;
+}
+function queueProjectSync(task){
+  const run=projectSyncChain
+    .catch(()=>null)
+    .then(()=>task());
+  projectSyncChain=run.catch(error=>{
+    console.error('project sync error:',error);
+    return null;
+  });
+  return run;
+}
+async function syncProjectToSupabase(projectId, silent=true){
+  const client=initSupabaseClient();
+  if(!client||!projectId) return false;
+  const project=(DB.projects||[]).find(x=>x.id===projectId);
+  if(!project) return false;
+  return queueProjectSync(async()=>{
+    const expectedUpdatedAt=String(project.updatedAt||'').trim();
+    const createPayload=JSON.stringify(project);
+    const updatePayload=JSON.stringify({
+      project,
+      expectedUpdatedAt
+    });
+    let data=null;
+    try{
+      if(REMOTE_PROJECT_IDS.has(projectId)){
+        data=await backendRequest('/projects/'+encodeURIComponent(projectId),{
+          method:'PUT',
+          body:updatePayload,
+          keepalive:true
+        });
+      }else{
+        data=await backendRequest('/projects',{
+          method:'POST',
+          body:createPayload,
+          keepalive:true
+        });
+      }
+    }catch(e){
+      if(Number(e&&e.status)===409){
+        const latestProject=e&&e.data&&e.data.project?e.data.project:null;
+        if(latestProject) applyRemoteProject(latestProject,true);
+        setSupabaseStatus('Project changed in another tab or browser. Latest saved version was reloaded.','warn');
+        toast('Another user updated this project. Your screen was refreshed to the latest saved version.',5000);
+        return false;
+      }
+      const msg=String(e&&e.message||'');
+      const missing=/not found|0 rows|no rows|multiple \(or no\) rows/i.test(msg);
+      if(!missing) throw e;
+      data=await backendRequest('/projects',{
+        method:'POST',
+        body:createPayload,
+        keepalive:true
+      });
+    }
+    if(data&&data.project) applyRemoteProject(data.project,false);
+    if(!silent) toast('Project saved');
+    return true;
+  }).catch(e=>{
+    if(!silent){
+      setSupabaseStatus('Project save failed: '+e.message,'err');
+      toast('Project save failed');
+    }
+    return false;
+  });
+}
+async function deleteProjectFromSupabase(projectId, silent=true){
+  const client=initSupabaseClient();
+  if(!client||!projectId) return false;
+  return queueProjectSync(async()=>{
+    await backendRequest('/projects/'+encodeURIComponent(projectId),{
+      method:'DELETE',
+      keepalive:true
+    });
+    REMOTE_PROJECT_IDS.delete(projectId);
+    return true;
+  }).catch(e=>{
+    if(!silent){
+      setSupabaseStatus('Project delete failed: '+e.message,'err');
+      toast('Project delete failed');
+    }
+    return false;
+  });
+}
 async function syncUsersToSupabase(silent=false){
-  return pushToSupabase(silent);
+  const client=initSupabaseClient();
+  if(!client) return false;
+  try{
+    const data=await backendRequest('/users',{
+      method:'PUT',
+      body:JSON.stringify({users:(APP_STATE.users||DEFAULT_USERS).map(normalizeUserRecord)}),
+      keepalive:true
+    });
+    APP_STATE.users=((data&&data.users)||[]).map(normalizeUserRecord);
+    if(!silent) toast('Users synced');
+    return true;
+  }catch(e){
+    if(!silent){
+      setSupabaseStatus('User sync failed: '+e.message,'err');
+      toast('User sync failed');
+    }
+    return false;
+  }
 }
 function buildAppSnapshot(){
   return {
@@ -1582,6 +1762,7 @@ function buildAppSnapshot(){
 function applyAppSnapshot(snapshot){
   if(!snapshot||!snapshot.db) throw new Error('Remote payload is missing app state');
   DB=normalizeDB(snapshot.db);
+  setRemoteProjectIds(DB.projects||[]);
   Object.keys(FA).forEach(k=>delete FA[k]);
   APP_STATE.users=((snapshot.users&&snapshot.users.length)?snapshot.users:DEFAULT_USERS).map(normalizeUserRecord);
   APP_STATE.roles=[...(snapshot.roles||DEFAULT_ROLES)];
@@ -1595,8 +1776,37 @@ function applyAppSnapshot(snapshot){
   if(CURRENT_USER) renderAll();
 }
 async function fetchUsersFromSupabase(){
-  const data=await backendRequest('/bootstrap');
+  const data=await backendRequest('/users');
   return ((data&&data.users)||[]).map(normalizeUserRecord);
+}
+async function syncAppStateToSupabase(silent=true){
+  const client=initSupabaseClient();
+  if(!client) return false;
+  try{
+    const data=await backendRequest('/app-state',{
+      method:'PUT',
+      body:JSON.stringify({
+        activeId:DB.activeId||'',
+        roles:[...(APP_STATE.roles||DEFAULT_ROLES)],
+        perms:JSON.parse(JSON.stringify(APP_STATE.perms||{})),
+        resets:JSON.parse(JSON.stringify(APP_STATE.resets||{}))
+      }),
+      keepalive:true
+    });
+    if(data){
+      DB.activeId=data.activeId||DB.activeId||'';
+      APP_STATE.roles=[...(data.roles||APP_STATE.roles||DEFAULT_ROLES)];
+      APP_STATE.perms=JSON.parse(JSON.stringify(data.perms||APP_STATE.perms||{}));
+      APP_STATE.resets=JSON.parse(JSON.stringify(data.resets||APP_STATE.resets||{}));
+    }
+    return true;
+  }catch(e){
+    if(!silent){
+      setSupabaseStatus('App state sync failed: '+e.message,'err');
+      toast('App state sync failed');
+    }
+    return false;
+  }
 }
 function findCachedUserLogin(username, password){
   const user=(Array.isArray(APP_STATE.users)?APP_STATE.users:[]).find(u=>u.username===username&&u.password===password);
@@ -1629,14 +1839,20 @@ async function pushToSupabase(silent=false){
     return false;
   }
   try{
-    const payload=buildAppSnapshot();
-    const data=await backendRequest('/bootstrap',{
-      method:'PUT',
-      body:JSON.stringify(payload)
-    });
-    if(data&&data.db) applyAppSnapshot(data);
-    setSupabaseStatus('Remote backup updated at '+new Date().toLocaleString()+'.','ok');
-    if(!silent) toast('Backend backup updated');
+    const projectIds=(DB.projects||[]).map(project=>project&&project.id).filter(Boolean);
+    let savedProjects=0;
+    for(const projectId of projectIds){
+      const saved=await syncProjectToSupabase(projectId,true);
+      if(saved) savedProjects++;
+    }
+    const usersSaved=await syncUsersToSupabase(true);
+    const appStateSaved=await syncAppStateToSupabase(true);
+    const allProjectsSaved=savedProjects===projectIds.length;
+    if(!allProjectsSaved||!usersSaved||!appStateSaved){
+      throw new Error('One or more records could not be synced. Reload the latest project before trying again.');
+    }
+    setSupabaseStatus('Remote sync completed at '+new Date().toLocaleString()+'.','ok');
+    if(!silent) toast('Backend sync updated');
     return true;
   }catch(e){
     if(!silent){
@@ -1668,7 +1884,7 @@ function scheduleSupabasePush(){
   const cfg=getSupabaseConfig();
   if(!normalizeApiBase(cfg.url)) return;
   if(supabasePushTimer) clearTimeout(supabasePushTimer);
-  supabasePushTimer=setTimeout(()=>{ pushToSupabase(true); },1200);
+  supabasePushTimer=setTimeout(()=>{ syncAppStateToSupabase(true); },300);
 }
 async function bootstrapSupabase(){
   populateSupabaseInputs();
@@ -2159,24 +2375,79 @@ function renderInspections(){
 }
 
 // ── PAYMENTS ──
+function getApprovedPaymentInvoices(p){
+  return (p.invoices||[]).filter(i=>i.approvalStatus==='approved');
+}
+function getPaymentSources(p){
+  const approvedInvoices=getApprovedPaymentInvoices(p);
+  const sources=[];
+  (p.quotes||[]).forEach(q=>{
+    if(q.status==='approved'||approvedInvoices.some(inv=>inv.quoteId===q.id)){
+      sources.push({
+        sourceType:'quote',
+        id:q.id,
+        sourceKey:q.id,
+        vendor:q.vendor||'Vendor',
+        scope:q.scope||'',
+        csi:q.csi||'',
+        amount:Number(q.amount||0),
+        date:q.date||'',
+        files:q.files||[],
+      });
+    }
+  });
+  (p.vendors||[]).forEach(v=>{
+    if(!v.quoteId&&approvedInvoices.some(inv=>inv.vcId===v.id)){
+      sources.push({
+        sourceType:'vendor',
+        id:v.id,
+        sourceKey:'vc_'+v.id,
+        vendor:v.vendor||'Vendor',
+        scope:v.scope||'Vendor Contract',
+        csi:v.csi||'',
+        amount:Number(v.amount||0),
+        date:v.date||'',
+        files:v.files||[],
+      });
+    }
+  });
+  return sources;
+}
+function getPaymentSourceInvoices(p, source){
+  return getApprovedPaymentInvoices(p).filter(inv=>
+    source.sourceType==='vendor'
+      ?inv.vcId===source.id
+      :inv.quoteId===source.id
+  );
+}
+function getPaymentSourceMilestones(p, source){
+  const vc=source.sourceType==='vendor'
+    ?(p.vendors||[]).find(v=>v.id===source.id)
+    :(p.vendors||[]).find(v=>v.quoteId===source.id);
+  return vc?vc.milestones||[]:[];
+}
+function getPaymentSourceContractAmount(source, invoices){
+  const booked=(invoices||[]).reduce((sum,inv)=>sum+Number(inv.amount||0),0);
+  return Math.max(Number(source.amount||0), booked);
+}
 function _buildPayLedgerHTML(quotes, grandContract, grandPaid, p){
   const grandBal = grandContract - grandPaid;
   const totalPct = grandContract ? Math.min(100, Math.round(grandPaid/grandContract*100)) : 0;
 
   const rows = quotes.map((q,idx)=>{
-    const invAll=(p.invoices||[]).filter(i=>i.quoteId===q.id&&i.approvalStatus==='approved');
+    const invAll=getPaymentSourceInvoices(p, q);
     const invPaidLedger = invAll.reduce((a,i)=>{
       if(i.paid) return a+Number(i.amount||0);
       return a+(i.partialPayments||[]).reduce((b,pp)=>b+Number(pp.amount||0),0);
     },0);
+    const qContract = getPaymentSourceContractAmount(q, invAll);
     const qPaid = invPaidLedger;
-    const qBal = Number(q.amount||0) - qPaid;
-    const pct = q.amount ? Math.min(100, Math.round(qPaid/Number(q.amount)*100)) : 0;
+    const qBal = qContract - qPaid;
+    const pct = qContract ? Math.min(100, Math.round(qPaid/qContract*100)) : 0;
     const rowBg = idx%2===0 ? '#fff' : 'var(--bg)';
 
     // Build invoice milestone sub-rows for this vendor
-    const vc=(p.vendors||[]).find(v=>v.quoteId===q.id);
-    const vMilestones=vc?vc.milestones||[]:[];
+    const vMilestones=getPaymentSourceMilestones(p, q);
 
     // Group invoices by milestone
     const invSubRows=invAll.map(inv=>{
@@ -2286,15 +2557,15 @@ function _buildPayLedgerHTML(quotes, grandContract, grandPaid, p){
 
 function renderPayments(){
   const p=proj(); if(!p) return;
-  const approved=(p.quotes||[]).filter(q=>q.status==='approved');
-  vEl('ct-pay').textContent=approved.length;
+  const sources=getPaymentSources(p);
+  vEl('ct-pay').textContent=sources.length;
   const listEl=vEl('pay-list');
   const emptyEl=vEl('pay-empty');
   const ledgerPanel=vEl('pay-ledger-panel');
   const ledgerEl=vEl('pay-ledger');
 
-  renderPayPieChart(approved, p);
-  if(!approved.length){
+  renderPayPieChart(sources, p);
+  if(!sources.length){
     listEl.innerHTML=''; emptyEl.style.display=''; 
     if(ledgerPanel)ledgerPanel.style.display='none';
     vEl('bs-c').textContent=fmtMoney(0); vEl('bs-p').textContent=fmtMoney(0);
@@ -2306,9 +2577,10 @@ function renderPayments(){
 
   // Totals: invoice payments per subcontractor
   let totalContract=0, totalPaid=0;
-  approved.forEach(q=>{
-    totalContract+=Number(q.amount||0);
-    (p.invoices||[]).filter(i=>i.quoteId===q.id&&i.approvalStatus==='approved').forEach(i=>{
+  sources.forEach(q=>{
+    const qInvoices=getPaymentSourceInvoices(p, q);
+    totalContract+=getPaymentSourceContractAmount(q, qInvoices);
+    qInvoices.forEach(i=>{
       if(i.paid){totalPaid+=Number(i.amount||0);}
       else{(i.partialPayments||[]).forEach(pp=>totalPaid+=Number(pp.amount||0));}
     });
@@ -2325,14 +2597,14 @@ function renderPayments(){
   // Ledger
   if(ledgerPanel&&ledgerEl){
     ledgerPanel.style.display='';
-    ledgerEl.innerHTML=_buildPayLedgerHTML(approved,totalContract,totalPaid,p);
+    ledgerEl.innerHTML=_buildPayLedgerHTML(sources,totalContract,totalPaid,p);
   }
 
   // Update per-sub export buttons
   const subBar=vEl('pay-export-bar'), subBtns=vEl('sub-export-btns');
   if(subBar&&subBtns){
     subBar.style.display='flex';
-    subBtns.innerHTML=approved.map(q=>`
+    subBtns.innerHTML=sources.map(q=>`
       <span style="display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden">
         <button class="btn btn-ghost btn-xs" style="border-radius:0;border:none" onclick="exportPaymentLedgerPDF('${q.id}')" title="PDF for ${q.vendor}">🖨 PDF</button>
         <span style="width:1px;background:var(--border)"></span>
@@ -2343,21 +2615,21 @@ function renderPayments(){
   }
 
   // Per-approved-quote panels — invoices only
-  approved.forEach(q=>{
+  sources.forEach(q=>{
     regFiles(q.files||[]);
-    (p.invoices||[]).filter(i=>i.quoteId===q.id).forEach(inv=>regFiles(inv.files||[]));
+    getPaymentSourceInvoices(p, q).forEach(inv=>regFiles(inv.files||[]));
   });
 
-  listEl.innerHTML=approved.map(q=>{
-    const qInvoices=(p.invoices||[]).filter(i=>i.quoteId===q.id&&(i.approvalStatus==='approved'));
+  listEl.innerHTML=sources.map(q=>{
+    const qInvoices=getPaymentSourceInvoices(p, q);
     // qPaid = fully paid invoices + all partial payments on unpaid invoices
     const qPaid=qInvoices.reduce((a,i)=>{
       if(i.paid) return a+Number(i.amount||0);
       return a+(i.partialPayments||[]).reduce((b,pp)=>b+Number(pp.amount||0),0);
     },0);
-    const qTotal=qInvoices.reduce((a,i)=>a+Number(i.amount||0),0);
-    const qBal=Number(q.amount||0)-qPaid;
-    const qPct=q.amount?Math.min(100,Math.round(qPaid/Number(q.amount)*100)):0;
+    const qTotal=getPaymentSourceContractAmount(q, qInvoices);
+    const qBal=qTotal-qPaid;
+    const qPct=qTotal?Math.min(100,Math.round(qPaid/qTotal*100)):0;
 
     const invRows=qInvoices.length?qInvoices.map((inv,idx)=>{
       const bg=idx%2===0?'#fff':'var(--bg)';
@@ -2365,8 +2637,14 @@ function renderPayments(){
       const partials=inv.partialPayments||[];
       const totalPartial=partials.reduce((a,pp)=>a+Number(pp.amount||0),0);
       const remaining=Number(inv.amount||0)-totalPartial;
-      const vc2=(p.vendors||[]).find(v=>v.quoteId===inv.quoteId);
+      const vc2=(p.vendors||[]).find(v=>(inv.vcId&&v.id===inv.vcId)||(inv.quoteId&&v.quoteId===inv.quoteId));
       const invMsName=vc2?(vc2.milestones||[]).find(m=>m.id===inv.milestoneId)?.name||'':'' ;
+      const lastTxn=partials.length
+        ?partials[partials.length-1]
+        :(inv.txnNo||inv.paidDate||inv.paid?{txnNo:inv.txnNo||'',date:inv.paidDate||'',amount:inv.amount}:null);
+      const lastTxnHTML=lastTxn
+        ?`<div style="font-size:9px;color:var(--blue);margin-top:3px">Last Txn${lastTxn.txnNo?`: ${lastTxn.txnNo}`:''}${lastTxn.date?` · ${fmtDate(lastTxn.date)}`:''}${lastTxn.amount?` · ${fmtMoney(lastTxn.amount)}`:''}</div>`
+        :'';
 
       // Build payment history (always visible)
       const payHistoryHTML=partials.length
@@ -2437,6 +2715,7 @@ function renderPayments(){
           <div style="font-size:12px;font-weight:600;color:var(--navy)">${inv.invoiceNo||'—'}</div>
           ${invMsName?`<div style="font-size:10px;color:var(--blue);margin-top:2px">📍 ${invMsName}</div>`:''}
           <div style="font-size:10px;color:var(--muted)">${inv.description||''}</div>
+          ${lastTxnHTML}
         </td>
         <td style="padding:8px 10px;font-size:10px;color:var(--muted);white-space:nowrap">${inv.invoiceDate?fmtDate(inv.invoiceDate):'—'}</td>
         <td style="padding:8px 10px;font-size:10px;color:${inv.dueDate&&new Date(inv.dueDate+'T12:00:00')<new Date()&&!inv.paid?'var(--red)':'var(--muted)'};white-space:nowrap">${inv.dueDate?fmtDate(inv.dueDate):'—'}</td>
@@ -2458,7 +2737,7 @@ function renderPayments(){
           <span class="badge b-green" style="background:rgba(45,106,15,.3);color:#9FE1CB">✓ Approved</span>
           <span style="font-size:11px;color:#8AAAC8">${q.scope}</span>
         </div>
-        <span style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:#fff">${fmtMoney(q.amount)}</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:#fff">${fmtMoney(qTotal)}</span>
       </div>
       <!-- Progress bar -->
       <div style="padding:11px 16px;border-bottom:1px solid var(--border);background:var(--bg);display:flex;align-items:center;gap:16px">
@@ -2911,7 +3190,7 @@ function openModal(type, id=null){
         </div>
         <div class="fr">
           <label class="fl">Against Milestone <span style="font-size:9px;color:var(--muted)">(from Vendor Contract)</span></label>
-          <select class="fs" id="f-inv-milestone" onchange="invMilestoneSelected(this.value,'${o.quoteId||''}')">
+          <select class="fs" id="f-inv-milestone" onchange="invMilestoneSelected(this.value,document.getElementById('f-inv-vendor')?.value||'')">
             <option value="">-- Select milestone (optional) --</option>
             ${msOpts}
           </select>
@@ -3493,10 +3772,11 @@ function isViewer(){
   return cu&&cu.role==='Viewer';
 }
 
-function saveModal(){
+async function saveModal(){
   if(isViewer()){toast('⚠ Viewers have read-only access');return;}
   if(curPage&&isPageReadOnly(curPage)){toast('⚠ You have View Only access to this page');return;}
   const p=proj();
+  let autoClientInvoiceId='';
   if(mMode==='project'){
     const name=vVal('f-name'); if(!name){toast('⚠ Project name required');return;}
     const color=document.querySelector('.cswatch.sel')?.dataset.color||COLORS[0];
@@ -3597,7 +3877,7 @@ function saveModal(){
     // Determine if manual or contract-based
     const manualSec=document.getElementById('inv-manual-section');
     const isManual=manualSec&&manualSec.style.display!=='none';
-    let qid='', vendorName='', manualScope='';
+    let qid='', vcId='', vendorName='', manualScope='';
     if(isManual){
       vendorName=(vEl('f-inv-manual-vendor')?.value||'').trim();
       manualScope=(vEl('f-inv-manual-scope')?.value||'').trim();
@@ -3607,7 +3887,7 @@ function saveModal(){
       const rawQid=qselEl?.value||'';
       if(rawQid.startsWith('vc_')){
         // Vendor contract without quote
-        const vcId=rawQid.replace('vc_','');
+        vcId=rawQid.replace('vc_','');
         const vc=(p.vendors||[]).find(v=>v.id===vcId);
         vendorName=vc?vc.vendor:(vEl('f-inv-vname')?.value.trim()||'');
       } else {
@@ -3620,9 +3900,14 @@ function saveModal(){
     const amt=parseFloat(vVal('f-inv-amt'))||0; if(!amt){toast('⚠ Amount required');return;}
     const ex=mId?(p.invoices||[]).find(x=>x.id===mId):null;
     const milestoneId=vVal('f-inv-milestone')||'';
-    const o={id:mId||uid(),vendor:vendorName,quoteId:qid,isManual:isManual||false,manualScope:manualScope||'',milestoneId,invoiceNo:invNo,amount:amt,invoiceDate:vVal('f-inv-date'),dueDate:vVal('f-inv-due'),description:vVal('f-inv-desc'),approvalStatus:ex?ex.approvalStatus:'pending',paid:ex?ex.paid:false,paidDate:ex?ex.paidDate:'',partialPayments:ex?ex.partialPayments||[]:[],files:ex?ex.files||[]:[],lienFiles:ex?ex.lienFiles||[]:[],};
+    const o={id:mId||uid(),vendor:vendorName,quoteId:qid,vcId,isManual:isManual||false,manualScope:manualScope||'',milestoneId,invoiceNo:invNo,amount:amt,invoiceDate:vVal('f-inv-date'),dueDate:vVal('f-inv-due'),description:vVal('f-inv-desc'),approvalStatus:ex?ex.approvalStatus:'pending',paid:ex?ex.paid:false,paidDate:ex?ex.paidDate:'',partialPayments:ex?ex.partialPayments||[]:[],files:ex?ex.files||[]:[],lienFiles:ex?ex.lienFiles||[]:[],};
     if(!p.invoices)p.invoices=[]; if(!p.vendors)p.vendors=[]; if(!p.checklist)p.checklist=[]; if(!p.qaqcLog)p.qaqcLog=[]; if(!p.chkCategories)p.chkCategories=[]; (p.checklist||[]).forEach(it=>{(it.comments||[]).forEach(c=>regFiles(c.files||[]));}); (p.qaqcLog||[]).forEach(it=>regFiles(it.files||[])); (p.checklist||[]).forEach(it=>{if(!it.comments)it.comments=[];});
     if(mId){const i=p.invoices.findIndex(x=>x.id===mId);if(i>-1)p.invoices[i]=o;}else p.invoices.push(o);
+    saveDB();
+    closeModal();
+    nav('payments');
+    toast('Invoice booked');
+    return;
   } else if(mMode==='clientcontract'&&p){
     const clientName=vVal('f-cc-client');
     const contractTitle=vVal('f-cc-title');
@@ -3641,9 +3926,10 @@ function saveModal(){
     const amount=parseFloat(vVal('f-ci-amt'))||0;
     const balanceRaw=vVal('f-ci-bal');
     const balanceDue=balanceRaw===''?amount:(parseFloat(balanceRaw)||0);
-    const o={id:mId||uid(),clientName,clientEmail:vVal('f-ci-email'),contractId:vVal('f-ci-contract')||'',invoiceNo,status:vVal('f-ci-status'),amount,balanceDue,invoiceDate:vVal('f-ci-date'),dueDate:vVal('f-ci-due'),description:vVal('f-ci-desc'),notes:vVal('f-ci-notes'),files:ex?ex.files||[]:[]};
+    const o={id:mId||uid(),clientName,clientEmail:vVal('f-ci-email'),contractId:vVal('f-ci-contract')||'',invoiceNo,status:vVal('f-ci-status'),amount,balanceDue,invoiceDate:vVal('f-ci-date'),dueDate:vVal('f-ci-due'),description:vVal('f-ci-desc'),notes:vVal('f-ci-notes'),files:ex?ex.files||[]:[],emailedAt:ex?ex.emailedAt:'',emailLastSentTo:ex?ex.emailLastSentTo:''};
     if(!p.clientInvoices)p.clientInvoices=[];
     if(mId){const i=p.clientInvoices.findIndex(x=>x.id===mId);if(i>-1)p.clientInvoices[i]=o;}else p.clientInvoices.push(o);
+    if(o.status==='Sent'&&(!ex||ex.status!=='Sent')&&o.clientEmail) autoClientInvoiceId=o.id;
   } else if(mMode==='cifiles'&&p){
     const inv=(p.clientInvoices||[]).find(x=>x.id===mId); if(inv)inv.files=[...mPending];
   } else if(mMode==='vendor'&&p){
@@ -3712,6 +3998,7 @@ function saveModal(){
   }
 
   saveDB(); closeModal(); renderAll(); toast('✓ Saved');
+  if(autoClientInvoiceId) await emailClientInvoice(autoClientInvoiceId,{silentAuto:true});
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -3731,6 +4018,7 @@ function delProj(id){
   if(!confirm('Delete this project and ALL its data?')) return;
   DB.projects=DB.projects.filter(p=>p.id!==id);
   if(DB.activeId===id) DB.activeId=DB.projects[0]?.id||null;
+  deleteProjectFromSupabase(id,true);
   saveDB(); renderAll(); toast('🗑 Project deleted');
   if(!DB.activeId) nav('projects');
 }
@@ -3995,15 +4283,16 @@ function _doPPTX(p){
 
 function exportPaymentLedgerPDF(qidFilter){
   const p=proj(); if(!p){toast('⚠ No project selected');return;}
-  const approved=(p.quotes||[]).filter(q=>q.status==='approved');
-  const quotes=qidFilter?approved.filter(q=>q.id===qidFilter):approved;
+  const approved=getPaymentSources(p);
+  const quotes=qidFilter?approved.filter(q=>q.id===qidFilter||q.sourceKey===qidFilter):approved;
   if(!quotes.length){toast('⚠ No approved quotes to export');return;}
 
   // Grand totals using invoices + partials (new system)
   let grandContract=0, grandPaid=0;
   approved.forEach(q=>{
-    grandContract+=Number(q.amount||0);
-    (p.invoices||[]).filter(i=>i.quoteId===q.id&&i.approvalStatus==='approved').forEach(i=>{
+    const qInvs=getPaymentSourceInvoices(p, q);
+    grandContract+=getPaymentSourceContractAmount(q, qInvs);
+    qInvs.forEach(i=>{
       if(i.paid) grandPaid+=Number(i.amount||0);
       else grandPaid+=(i.partialPayments||[]).reduce((a,pp)=>a+Number(pp.amount||0),0);
     });
@@ -4011,19 +4300,18 @@ function exportPaymentLedgerPDF(qidFilter){
   const grandBal=grandContract-grandPaid;
 
   const subsHTML=quotes.map(function(q){
-    // Get invoices for this quote
-    const qInvs=(p.invoices||[]).filter(i=>i.quoteId===q.id&&i.approvalStatus==='approved');
-    // Get vendor contract milestones
-    const vc=(p.vendors||[]).find(v=>v.quoteId===q.id);
-    const vMilestones=vc?vc.milestones||[]:[];
+    // Get invoices for this source
+    const qInvs=getPaymentSourceInvoices(p, q);
+    const vMilestones=getPaymentSourceMilestones(p, q);
+    const qContract=getPaymentSourceContractAmount(q, qInvs);
 
     // Calculate paid/balance using invoices
     const qPaid=qInvs.reduce(function(a,i){
       if(i.paid) return a+Number(i.amount||0);
       return a+(i.partialPayments||[]).reduce(function(b,pp){return b+Number(pp.amount||0);},0);
     },0);
-    const qBal=Number(q.amount||0)-qPaid;
-    const pct=q.amount?Math.min(100,Math.round(qPaid/Number(q.amount)*100)):0;
+    const qBal=qContract-qPaid;
+    const pct=qContract?Math.min(100,Math.round(qPaid/qContract*100)):0;
     const proofCount=qInvs.reduce(function(a,i){return a+(i.files||[]).length;},0);
     const lienCount=qInvs.reduce(function(a,i){return a+(i.lienFiles||[]).length;},0);
 
@@ -4082,7 +4370,7 @@ function exportPaymentLedgerPDF(qidFilter){
           +'<div style="font-size:10px;color:#8AAAC8">'+q.scope+(q.csi?' &nbsp;&middot;&nbsp; '+q.csi:'')+'</div>'
         +'</div>'
         +'<div style="text-align:right">'
-          +'<div style="font-size:16px;font-weight:700">$'+Number(q.amount).toLocaleString()+'</div>'
+          +'<div style="font-size:16px;font-weight:700">$'+Number(qContract).toLocaleString()+'</div>'
           +'<div style="font-size:10px;color:#8AAAC8">'+pct+'% paid</div>'
         +'</div>'
       +'</div>'
@@ -4101,7 +4389,7 @@ function exportPaymentLedgerPDF(qidFilter){
       +'<div style="border:1px solid #e0ddd5;border-top:none;background:#f4f3ef;padding:12px 16px">'
         +'<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#6b6a64;margin-bottom:10px">Payment Summary &mdash; '+q.vendor+'</div>'
         +'<div style="display:flex;border:1px solid #e0ddd5;border-radius:6px;overflow:hidden;background:#fff">'
-          +'<div style="flex:1;padding:10px 12px;border-right:1px solid #e0ddd5;text-align:center"><div style="font-size:9px;color:#6b6a64;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Contract Value</div><div style="font-size:18px;font-weight:700;color:#0C1B2E">$'+Number(q.amount).toLocaleString()+'</div></div>'
+          +'<div style="flex:1;padding:10px 12px;border-right:1px solid #e0ddd5;text-align:center"><div style="font-size:9px;color:#6b6a64;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Contract Value</div><div style="font-size:18px;font-weight:700;color:#0C1B2E">$'+Number(qContract).toLocaleString()+'</div></div>'
           +'<div style="flex:1;padding:10px 12px;background:#ECF5E3;border-right:1px solid #e0ddd5;text-align:center"><div style="font-size:9px;color:#2D6A0F;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">&#10003; Paid</div><div style="font-size:18px;font-weight:700;color:#2D6A0F">$'+qPaid.toLocaleString()+'</div></div>'
           +'<div style="flex:1;padding:10px 12px;background:'+(qBal>0?'#FDEAEA':'#ECF5E3')+';border-right:1px solid #e0ddd5;text-align:center"><div style="font-size:9px;color:'+balColor+';text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Balance Due</div><div style="font-size:18px;font-weight:700;color:'+balColor+'">$'+qBal.toLocaleString()+'</div></div>'
           +'<div style="flex:1;padding:10px 12px;text-align:center"><div style="font-size:9px;color:#6b6a64;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Progress</div><div style="font-size:18px;font-weight:700;color:'+(pct===100?'#2D6A0F':'#0C1B2E')+'">'+pct+'%</div><div style="height:5px;background:#e0ddd5;border-radius:3px;overflow:hidden;margin-top:5px"><div style="height:100%;width:'+pct+'%;background:'+progBarColor+';border-radius:3px"></div></div></div>'
@@ -4551,7 +4839,7 @@ function renderInvoices(){
           </div>`;
 
       // Get milestone name
-      const invVc=(p.vendors||[]).find(v=>v.quoteId===inv.quoteId);
+      const invVc=(p.vendors||[]).find(v=>(inv.vcId&&v.id===inv.vcId)||(inv.quoteId&&v.quoteId===inv.quoteId));
       const invMs=invVc?(invVc.milestones||[]).find(m=>m.id===inv.milestoneId):null;
       return`<tr style="background:${bg};border-left:3px solid ${st==='approved'?'var(--green-m)':st==='rejected'?'var(--red-m)':'var(--border)'}">
         <td style="padding:8px 10px">
@@ -4639,6 +4927,14 @@ function rejectInvoice(iid){
   inv.approvalStatus='rejected';
   saveDB();renderAll();toast('✗ Invoice rejected');
 }
+function approveInvoice(iid){
+  const p=proj();if(!p)return;
+  const inv=(p.invoices||[]).find(x=>x.id===iid);if(!inv)return;
+  inv.approvalStatus='approved';
+  saveDB();
+  nav('payments');
+  toast('Invoice approved');
+}
 function invSwitchSource(mode){
   const contractBtn=document.getElementById('inv-src-contract');
   const manualBtn=document.getElementById('inv-src-manual');
@@ -4661,7 +4957,9 @@ function invSwitchSource(mode){
 function invUpdateMilestones(qid){
   const p=proj();if(!p)return;
   const sel=vEl('f-inv-milestone');if(!sel)return;
-  const vc=(p.vendors||[]).find(v=>v.quoteId===qid);
+  const vc=(qid||'').startsWith('vc_')
+    ?(p.vendors||[]).find(v=>v.id===(qid||'').replace('vc_',''))
+    :(p.vendors||[]).find(v=>v.quoteId===qid);
   const ms=vc?vc.milestones||[]:[];
   sel.innerHTML='<option value="">-- Select milestone (optional) --</option>'
     +ms.map(m=>`<option value="${m.id}">${m.name} — $${Number(m.amount||0).toLocaleString()}</option>`).join('');
@@ -4669,7 +4967,9 @@ function invUpdateMilestones(qid){
 }
 function invMilestoneSelected(msId, qid){
   const p=proj();if(!p)return;
-  const vc=(p.vendors||[]).find(v=>v.quoteId===qid);
+  const vc=(qid||'').startsWith('vc_')
+    ?(p.vendors||[]).find(v=>v.id===(qid||'').replace('vc_',''))
+    :(p.vendors||[]).find(v=>v.quoteId===qid);
   const ms=vc?(vc.milestones||[]).find(m=>m.id===msId):null;
   const info=vEl('f-inv-ms-info');
   if(info&&ms){
@@ -4700,12 +5000,12 @@ function renderPayPieChart(approved, p){
   // Calculate per-vendor stats
   const segments=[];
   approved.forEach(q=>{
-    const qInvs=(p.invoices||[]).filter(i=>i.quoteId===q.id&&i.approvalStatus==='approved');
+    const qInvs=getPaymentSourceInvoices(p, q);
     const qPaid=qInvs.reduce((a,i)=>{
       if(i.paid) return a+Number(i.amount||0);
       return a+(i.partialPayments||[]).reduce((b,pp)=>b+Number(pp.amount||0),0);
     },0);
-    const qTotal=Number(q.amount||0);
+    const qTotal=getPaymentSourceContractAmount(q, qInvs);
     const pct=qTotal?Math.min(100,Math.round(qPaid/qTotal*100)):0;
     const color=pct===100?'#2D6A0F':pct>0?'#D98E00':'#9B1F1F';
     segments.push({id:q.id,label:q.vendor.length>22?q.vendor.slice(0,20)+'…':q.vendor,value:qTotal||1,paid:qPaid,total:qTotal,pct,color});
@@ -4954,6 +5254,8 @@ function renderVendors(){
 
   el.innerHTML=vendors.map((v,idx)=>{
     const q=approved.find(x=>x.id===v.quoteId)||null;
+    const milestones=(v.milestones||[]).filter(ms=>ms&&ms.name);
+    const scheduledTotal=milestones.reduce((sum,ms)=>sum+Number(ms.amount||0),0);
     const filesHTML=(v.files||[]).length
       ?`<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">`
         +(v.files||[]).map(f=>`<div style="display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 10px">
@@ -4963,6 +5265,24 @@ function renderVendors(){
           </div>`).join('')
         +`</div>`
       :'<div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px">No contract files attached</div>';
+    const milestonesHTML=milestones.length
+      ?`<div style="display:flex;flex-direction:column;gap:8px">
+          ${milestones.map((ms,i)=>`<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;background:${i%2===0?'#fff':'var(--bg)'};border:1px solid var(--border);border-radius:7px;padding:9px 11px">
+            <div style="min-width:180px;flex:1">
+              <div style="font-size:12px;font-weight:700;color:var(--navy)">${ms.name||'Milestone'}</div>
+              <div style="font-size:10px;color:var(--muted);margin-top:2px">${ms.dueDate?('Due '+fmtDate(ms.dueDate)):'No due date set'}</div>
+            </div>
+            <div style="text-align:right;min-width:110px">
+              <div style="font-size:13px;font-weight:700;color:var(--navy)">${ms.amount?'$'+Number(ms.amount).toLocaleString():'—'}</div>
+              <div style="font-size:10px;color:var(--blue)">${v.amount&&ms.amount?Math.round(Number(ms.amount)/Number(v.amount)*100)+'% of contract':'No % yet'}</div>
+            </div>
+          </div>`).join('')}
+          <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:4px;border-top:1px solid var(--border);font-size:11px">
+            <span style="color:var(--muted)">Milestones: ${milestones.length}</span>
+            <span style="font-weight:700;color:var(--navy)">Scheduled: $${scheduledTotal.toLocaleString()}</span>
+          </div>
+        </div>`
+      :'<div style="font-size:11px;color:var(--muted);font-style:italic">No payment milestones added yet.</div>';
 
     return`<div class="panel" style="margin-bottom:14px">
       <div class="ph" style="background:var(--navy)">
@@ -4990,6 +5310,10 @@ function renderVendors(){
           </span>
         </div>
         ${v.notes?`<div style="grid-column:1/-1"><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Notes</div><div style="font-size:11px;color:var(--text)">${v.notes}</div></div>`:''}
+      </div>
+      <div style="padding:10px 16px;border-top:1px solid var(--border)">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:8px">Payment Milestones (${milestones.length})</div>
+        ${milestonesHTML}
       </div>
       <!-- Contract files -->
       <div style="padding:10px 16px;border-top:1px solid var(--border)">
@@ -5142,17 +5466,21 @@ function generateVendorContract(vid){
   toast('🖨 Contract opened — Print → Save as PDF');
 }
 
-function sendContractEmail(vid){
+async function sendContractEmail(vid){
   const p=proj(); if(!p)return;
   const v=(p.vendors||[]).find(x=>x.id===vid); if(!v)return;
   const email=v.vendorEmail||'';
   if(!email){toast('⚠ No vendor email — edit the contract to add vendor email first');return;}
-  const subject=encodeURIComponent('Subcontract Agreement — '+v.vendor+' / '+p.name);
-  const msPart=(v.milestones||[]).length?' Payment milestones: '+v.milestones.map(function(ms){return ms.name+'($'+Number(ms.amount||0).toLocaleString()+')';}).join(', '):'';
-  const intro='Dear '+v.vendor+', Please find the Subcontract Agreement for: '+p.name+' | Address: '+(p.address||'')+' | Contract: '+(v.contractNo||'N/A')+' | Value: $'+Number(v.amount||0).toLocaleString()+msPart+' | Please review, sign, and return at your earliest convenience. Best regards, Livio Building Systems';
-  const body=encodeURIComponent(intro);
-  window.open('mailto:'+email+'?subject='+subject+'&body='+body,'_self');
-  toast('✉ Opening email client — sending contract to '+v.vendor);
+  try{
+    await backendRequest('/vendor-contracts/email',{
+      method:'POST',
+      body:JSON.stringify({project:p,contract:v})
+    });
+    toast('Contract emailed to '+v.vendor);
+  }catch(e){
+    console.error('vendor contract email error:',e);
+    toast('Email error: '+e.message);
+  }
 }
 
 function delVendor(vid){
@@ -5365,18 +5693,27 @@ async function downloadClientInvoicePDF(cid){
   printClientInvoice(cid);
 }
 
-async function emailClientInvoice(cid){
+async function sendClientInvoiceEmailRequest(ctx){
+  const email=(ctx.invoice.clientEmail||(ctx.contract&&ctx.contract.clientEmail)||'').trim();
+  if(!email) throw new Error('Add a client email before sending');
+  await backendRequest('/client-invoices/email',{
+    method:'POST',
+    body:JSON.stringify({project:ctx.project,invoice:ctx.invoice,contract:ctx.contract||null})
+  });
+  ctx.invoice.emailedAt=new Date().toISOString();
+  ctx.invoice.emailLastSentTo=email;
+  return email;
+}
+
+async function emailClientInvoice(cid, options={}){
   const ctx=getClientInvoiceContext(cid);
   if(!ctx.project||!ctx.invoice){toast('Client invoice not found');return;}
-  const email=(ctx.invoice.clientEmail||(ctx.contract&&ctx.contract.clientEmail)||'').trim();
-  if(!email){toast('Add a client email before sending');return;}
   try{
-    await backendRequest('/client-invoices/email',{
-      method:'POST',
-      body:JSON.stringify({project:ctx.project,invoice:ctx.invoice,contract:ctx.contract||null})
-    });
-    if(ctx.invoice.status==='Draft'||!ctx.invoice.status){ctx.invoice.status='Sent'; saveDB(); renderAll();}
-    toast('Invoice emailed to '+email);
+    const email=await sendClientInvoiceEmailRequest(ctx);
+    if(ctx.invoice.status==='Draft'||!ctx.invoice.status) ctx.invoice.status='Sent';
+    saveDB();
+    if(!options.skipRender) renderAll();
+    toast(options.silentAuto?'Invoice emailed automatically to '+email:'Invoice emailed to '+email);
   }catch(e){
     console.error('client invoice email error:',e);
     toast('Email error: '+e.message);
@@ -6041,13 +6378,8 @@ function currentUser(){
 }
 
 function doLogout(){
-  CURRENT_USER=null;
-  persistCurrentUser();
-  applyCurrentUserUI();
-  const ue=document.getElementById('login-user');const pe=document.getElementById('login-pass');
-  if(ue){ue.value='';setTimeout(()=>ue.focus(),100);}
-  if(pe)pe.value='';
-  const errEl=document.getElementById('login-error');if(errEl)errEl.style.display='none';
+  applyLoggedOutState(false);
+  notifyAuthTabs('logout');
 }
 
 function toggleLoginPass(){
@@ -6247,7 +6579,7 @@ function closeForgotPass(){
   const er=document.getElementById('forgot-error');if(er)er.style.display='none';
   const ok=document.getElementById('forgot-success');if(ok)ok.style.display='none';
 }
-function doForgotPass(){
+async function doForgotPass(){
   const username=(document.getElementById('forgot-user')?.value||'').trim();
   const email=(document.getElementById('forgot-email')?.value||'').trim();
   const errEl=document.getElementById('forgot-error');
@@ -6259,28 +6591,32 @@ function doForgotPass(){
     if(errEl){errEl.style.display='';errEl.textContent='No account found with that username and email combination.';}
     return;
   }
-  // Generate 6-digit reset code
   const code=String(Math.floor(100000+Math.random()*900000));
-  const expiry=Date.now()+30*60*1000; // 30 min
+  const expiry=Date.now()+30*60*1000;
   const resets=JSON.parse(JSON.stringify(APP_STATE.resets||{}));
   resets[username]={code,expiry};
   APP_STATE.resets=resets;
-  scheduleSupabasePush();
-
-  // Open mailto
-  const subject=encodeURIComponent('Livio Building Systems — Password Reset');
-  const bodyParts=['Hello '+username+',','','You requested a password reset for your Livio Building Systems account.','','Your reset code is: '+code,'','This code is valid for 30 minutes.','','Steps to reset: 1. Open the Livio Building Systems app  2. Click Forgot Password?  3. Click I have a reset code  4. Enter the code and your new password','','If you did not request this, please ignore this email.','','— Livio Building Systems'];
-  const body=encodeURIComponent(bodyParts.join('\n'));
-  window.open('mailto:'+email+'?subject='+subject+'&body='+body,'_self');
-  if(errEl)errEl.style.display='none';
-  if(okEl){
-    okEl.style.display='';
-    okEl.innerHTML='✓ Email client opened! Send the email to <strong>'+email+'</strong>. '
-      +'<br><span style="font-size:10px">Then come back and click <em>"I have a reset code"</em> below.</span>';
+  try{
+    await syncAppStateToSupabase(true);
+    await backendRequest('/auth/forgot-password',{
+      method:'POST',
+      body:JSON.stringify({username,email,code})
+    });
+    if(errEl)errEl.style.display='none';
+    if(okEl){
+      okEl.style.display='';
+      okEl.innerHTML='Reset code emailed to <strong>'+email+'</strong>. '
+        +'<br><span style="font-size:10px">Then click <em>"I have a reset code"</em> below.</span>';
+    }
+    const resetBtn=document.getElementById('forgot-reset-btn');
+    if(resetBtn)resetBtn.style.display='';
+  }catch(e){
+    console.error('forgot password email error:',e);
+    if(errEl){
+      errEl.style.display='';
+      errEl.textContent='Reset email failed: '+e.message;
+    }
   }
-  // Show reset code link
-  const resetBtn=document.getElementById('forgot-reset-btn');
-  if(resetBtn)resetBtn.style.display='';
 }
 function showResetPass(){
   closeForgotPass();
@@ -6353,6 +6689,12 @@ function doSetupPass(){
 // ══════════════════════════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════════════════════════
+bindCrossTabAuth();
+window.addEventListener('pagehide',()=>{
+  const activeProjectId=proj()?.id||DB.activeId||'';
+  if(activeProjectId) syncProjectToSupabase(activeProjectId,true);
+  syncAppStateToSupabase(true);
+});
 CURRENT_USER=restoreCurrentUser();
 applyCurrentUserUI(false);
 if(!CURRENT_USER) setTimeout(()=>document.getElementById('login-user')?.focus(),100);
@@ -6363,3 +6705,5 @@ bootstrapSupabase().finally(()=>{
 </script>
 </body>
 </html>
+
+

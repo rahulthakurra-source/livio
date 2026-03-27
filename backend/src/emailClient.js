@@ -35,10 +35,7 @@ export async function sendClientInvoiceEmail({
   pdfBytes,
   filename,
 }) {
-  const transporter = createTransporter();
-
-  await transporter.sendMail({
-    from: config.smtpFrom,
+  return sendEmail({
     to,
     subject,
     text,
@@ -50,5 +47,24 @@ export async function sendClientInvoiceEmail({
         contentType: "application/pdf",
       },
     ],
+  });
+}
+
+export async function sendEmail({
+  to,
+  subject,
+  text,
+  html,
+  attachments = [],
+}) {
+  const transporter = createTransporter();
+
+  await transporter.sendMail({
+    from: config.smtpFrom,
+    to,
+    subject,
+    text,
+    html,
+    attachments,
   });
 }
