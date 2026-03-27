@@ -1344,7 +1344,7 @@ function restoreCurrentUser(){
     return null;
   }
 }
-function applyCurrentUserUI(shouldRender=true){
+function applyCurrentUserUI(shouldRender=false){
   const ls=document.getElementById('login-screen');
   const lbl=document.getElementById('sb-user-label');
   const errEl=document.getElementById('login-error');
@@ -1552,7 +1552,7 @@ function applyAppSnapshot(snapshot){
   reconcileCurrentUser();
   applyCurrentUserUI(false);
   buildSidebarNav();
-  renderAll();
+  if(CURRENT_USER) renderAll();
 }
 async function fetchUsersFromSupabase(){
   const data=await backendRequest('/bootstrap');
@@ -1644,7 +1644,7 @@ async function bootstrapSupabase(){
       APP_STATE.resets=JSON.parse(JSON.stringify(defaults.resets));
       registerAllFiles();
       buildSidebarNav();
-      renderAll();
+      if(CURRENT_USER) renderAll();
       await pushToSupabase(true);
       setSupabaseStatus('Backend connected. A fresh remote app state was created.','ok');
     }
@@ -1693,6 +1693,10 @@ function handleAdd(){ nav(curPage); }
 //  RENDER ALL
 // ══════════════════════════════════════════════════════════════════
 function renderAll(){
+  if(!CURRENT_USER){
+    buildSidebarNav();
+    return;
+  }
   // Rebuild sidebar nav first so visible pages are correct
   buildSidebarNav();
   // Apply viewer / view-only read-only UI
@@ -5941,7 +5945,10 @@ async function doLogin(){
   const user=(document.getElementById('login-user')?.value||'').trim();
   const pass=(document.getElementById('login-pass')?.value||'').trim();
   const errEl=document.getElementById('login-error');
+  const loginBtn=document.querySelector('#login-screen button[onclick="doLogin()"]');
+  const loginBtnText=loginBtn?loginBtn.textContent:'';
   if(!user||!pass){if(errEl){errEl.style.display='';errEl.textContent='Please enter username and password.';}return;}
+  if(loginBtn){loginBtn.disabled=true;loginBtn.textContent='Signing In...';loginBtn.style.opacity='.8';}
   try{
     const data=await backendRequest('/auth/login',{
       method:'POST',
@@ -5951,12 +5958,15 @@ async function doLogin(){
     if(!found) throw new Error('Invalid username or password.');
     CURRENT_USER={id:found.id,username:found.username,role:found.role};
     persistCurrentUser();
-    applyCurrentUserUI();
-    nav('projects');
+    applyCurrentUserUI(false);
+    if(errEl) errEl.style.display='none';
+    requestAnimationFrame(()=>nav('projects'));
   }catch(e){
     console.error('doLogin backend error:',e);
     if(errEl){errEl.style.display='';errEl.textContent=e&&e.message?e.message:'Login failed.';}
     const pe=document.getElementById('login-pass');if(pe){pe.value='';pe.focus();}
+  }finally{
+    if(loginBtn){loginBtn.disabled=false;loginBtn.textContent=loginBtnText;loginBtn.style.opacity='';}
   }
 }
 
