@@ -2052,6 +2052,12 @@ function buildSidebarNav(){
     const pg=li.dataset.page;
     li.style.display=pages.includes(pg)||pg==='projects'?'':'none';
   });
+  const navList=document.querySelector('.sb-nav');
+  const vendorItem=navList?.querySelector('li[data-page="vendorprofiles"]');
+  const quotesItem=navList?.querySelector('li[data-page="quotes"]');
+  if(navList&&vendorItem&&quotesItem&&vendorItem!==quotesItem.previousElementSibling){
+    navList.insertBefore(vendorItem, quotesItem);
+  }
 }
 
 function nav(page) {
@@ -6428,8 +6434,8 @@ const PERMS_KEY='livio_perms_v1';
 const ALL_PAGES=[
   {id:'projects',label:'All Projects'},{id:'dashboard',label:'Dashboard'},
   {id:'works',label:'Works at Site'},{id:'milestones',label:'Milestones'},
-  {id:'quotes',label:'Quotes'},{id:'plans',label:'Plans & Docs'},
-  {id:'inspections',label:'Inspections'},{id:'vendorprofiles',label:'Vendor Directory'},{id:'vendors',label:'Vendor Contracts'},
+  {id:'vendorprofiles',label:'Vendor Directory'},{id:'quotes',label:'Quotes'},{id:'plans',label:'Plans & Docs'},
+  {id:'inspections',label:'Inspections'},{id:'vendors',label:'Vendor Contracts'},
   {id:'clientcontracts',label:'Client Contracts'},
   {id:'clientinvoices',label:'Client Invoices'},
   {id:'invoices',label:'Invoices'},{id:'payments',label:'Payments'},
@@ -6453,8 +6459,12 @@ function getUserPages(user){
     return userPerms.length ? userPerms : ALL_PAGES.map(p=>p.id);
   }
   // New format: object {pageId:'full'|'view'|'none'}
-  const allowed=Object.entries(userPerms).filter(([k,v])=>v==='full'||v==='view').map(([k])=>k);
-  return allowed.length ? allowed : ALL_PAGES.map(p=>p.id);
+  return ALL_PAGES
+    .filter(pg=>{
+      const lvl=userPerms[pg.id];
+      return !lvl || lvl==='full' || lvl==='view';
+    })
+    .map(pg=>pg.id);
 }
 
 function getPageAccess(user, pageId){
