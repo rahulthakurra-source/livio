@@ -410,6 +410,7 @@ tr:hover .row-actions{opacity:1}
     <li data-page="qaqc"><a id="n-qaqc"      onclick="nav('qaqc')">      <span class="ic">🔍</span>QA/QC              <span class="ct" id="ct-qaqc">0</span></a></li>
     <li data-page="compliance"><a id="n-compliance" onclick="nav('compliance')"><span class="ic">✅</span>Compliance</a></li>
     <li data-page="export"><a id="n-export"     onclick="nav('export')">    <span class="ic">📥</span>Export</a></li>
+    <li data-page="vendorprofiles"><a id="n-vendorprofiles" onclick="nav('vendorprofiles')"><span class="ic">VD</span>Vendor Directory   <span class="ct" id="ct-vp">0</span></a></li>
     <li data-page="clientcontracts"><a id="n-clientcontracts" onclick="nav('clientcontracts')"><span class="ic">CC</span>Client Contracts   <span class="ct" id="ct-cc">0</span></a></li>
     <li data-page="clientinvoices"><a id="n-clientinvoices" onclick="nav('clientinvoices')"><span class="ic">CI</span>Client Invoices   <span class="ct" id="ct-ci">0</span></a></li>
   </ul>
@@ -632,11 +633,20 @@ tr:hover .row-actions{opacity:1}
       <div id="pay-empty" style="display:none" class="empty"><div class="empty-ic">💳</div>No approved quotes yet. Mark a quote as Approved to start tracking payments.</div>
     </div>
 
+    <!-- ── VENDOR DIRECTORY ── -->
+    <div class="page" id="pg-vendorprofiles">
+      <div class="sh">
+        <div><div class="sh-title">Vendor Directory</div><div class="sh-sub">Add each vendor once, then select them from dropdowns in quotes, contracts, and invoices</div></div>
+        <button class="btn btn-navy" onclick="openModal('vendorprofile')">+ Add Vendor</button>
+      </div>
+      <div id="vp-content"></div>
+    </div>
+
     <!-- ── VENDOR CONTRACTS ── -->
     <div class="page" id="pg-vendors">
       <div class="sh">
         <div><div class="sh-title">Vendor Contracts</div><div class="sh-sub">Subcontractor agreements · Signed contracts · SOW documents</div></div>
-        <button class="btn btn-navy" onclick="openModal('vendor')">+ Add Vendor</button>
+        <button class="btn btn-navy" onclick="openModal('vendor')">+ Add Contract</button>
       </div>
       <div id="ven-content"></div>
     </div>
@@ -1093,6 +1103,119 @@ const localDateStr = (d=new Date()) => {
 const fmtBytes = b => b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB';
 const fileIcon = n => ({pdf:'📄',dwg:'📐',dxf:'📐',png:'🖼',jpg:'🖼',jpeg:'🖼',xlsx:'📊',xls:'📊',docx:'📝',doc:'📝',zip:'🗜',rvt:'🏗',ifc:'🏗'}[n.split('.').pop().toLowerCase()]||'📎');
 const vEl = id => document.getElementById(id);
+function uniqNames(values){
+  const seen=new Set(), out=[];
+  (values||[]).forEach(value=>{
+    const name=String(value||'').trim();
+    if(!name) return;
+    const key=name.toLowerCase();
+    if(seen.has(key)) return;
+    seen.add(key);
+    out.push(name);
+  });
+  return out.sort((a,b)=>a.localeCompare(b));
+}
+function lookupKey(value){
+  return String(value||'').trim().toLowerCase();
+}
+function getSavedNameOptions(kind){
+  const values=[];
+  (DB.projects||[]).forEach(p=>{
+    if(kind==='vendor'){
+      (p.vendorProfiles||[]).forEach(v=>values.push(v.vendor));
+      (p.quotes||[]).forEach(q=>values.push(q.vendor));
+      (p.vendors||[]).forEach(v=>values.push(v.vendor));
+      (p.invoices||[]).forEach(inv=>values.push(inv.vendor));
+    }else if(kind==='client'){
+      (p.clientContracts||[]).forEach(c=>values.push(c.clientName));
+      (p.clientInvoices||[]).forEach(inv=>values.push(inv.clientName));
+    }
+  });
+  return uniqNames(values);
+}
+function datalistHTML(id, values){
+  const options=uniqNames(values);
+  if(!options.length) return '';
+  return `<datalist id="${id}">${options.map(v=>`<option value="${esc(v)}"></option>`).join('')}</datalist>`;
+}
+function findVendorProfileByName(name){
+  const key=lookupKey(name);
+  if(!key) return null;
+  const current=proj();
+  const profile=((current&&current.vendorProfiles)||[]).find(v=>lookupKey(v.vendor)===key);
+  if(profile) return profile;
+  const local=((current&&current.vendors)||[]).find(v=>lookupKey(v.vendor)===key);
+  if(local) return local;
+  for(const project of (DB.projects||[])){
+    const profileMatch=(project.vendorProfiles||[]).find(v=>lookupKey(v.vendor)===key);
+    if(profileMatch) return profileMatch;
+    const match=(project.vendors||[]).find(v=>lookupKey(v.vendor)===key);
+    if(match) return match;
+  }
+  return null;
+}
+function getVendorProfiles(project=proj()){
+  return (project&&project.vendorProfiles)||[];
+}
+function getVendorProfileById(profileId, project=proj()){
+  return getVendorProfiles(project).find(v=>v.id===profileId)||null;
+}
+function findVendorProfileIdByName(name, project=proj()){
+  const match=findVendorProfileByName(name);
+  return match&&match.id?match.id:'';
+}
+function vendorProfileOptionsHTML(selectedId='', project=proj(), placeholder='-- Select saved vendor --'){
+  const profiles=getVendorProfiles(project);
+  return `<option value="">${placeholder}</option>`+profiles.map(v=>`<option value="${v.id}" ${selectedId===v.id?'selected':''}>${esc(v.vendor)}</option>`).join('');
+}
+function fillFieldIfBlank(id, value){
+  const el=vEl(id);
+  if(!el||!value||String(el.value||'').trim()) return;
+  el.value=String(value);
+}
+function quoteVendorSelected(name){
+  const profile=findVendorProfileByName(name);
+  if(!profile) return;
+  fillFieldIfBlank('f-scope', profile.scope);
+}
+function vendorProfileSelected(name){
+  const profile=findVendorProfileByName(name);
+  if(!profile) return;
+  fillFieldIfBlank('f-ven-email', profile.vendorEmail);
+  fillFieldIfBlank('f-ven-scope', profile.scope);
+  fillFieldIfBlank('f-ven-exclusions', profile.exclusions);
+  fillFieldIfBlank('f-ven-notes', profile.notes);
+  fillFieldIfBlank('f-ven-bank', profile.bankName);
+  fillFieldIfBlank('f-ven-acct', profile.bankAccount);
+  fillFieldIfBlank('f-ven-routing', profile.routingNo);
+  fillFieldIfBlank('f-ven-zelle', profile.zelleId);
+  fillFieldIfBlank('f-ven-wire', profile.wireRef);
+  const acctType=vEl('f-ven-accttype');
+  if(acctType&&profile.bankAcctType&&(acctType.value==='Checking'||!acctType.value)) acctType.value=profile.bankAcctType;
+  const contractType=vEl('f-ven-type');
+  if(contractType&&profile.contractType&&(contractType.value==='Lump Sum'||!contractType.value)) contractType.value=profile.contractType;
+}
+function vendorProfileSelectChanged(profileId){
+  const profile=getVendorProfileById(profileId);
+  if(profile) vendorProfileSelected(profile.vendor);
+}
+function vendorContractQuoteSelected(sel){
+  const profileSel=vEl('f-ven-profile');
+  const raw=sel&&sel.value?sel.value:'';
+  if(!profileSel) return;
+  if(raw&&raw!=='__other__'){
+    const current=proj();
+    const quote=(current&&current.quotes||[]).find(q=>q.id===raw);
+    const profileId=(quote&&quote.vendorProfileId)||findVendorProfileIdByName(quote&&quote.vendor||'', current);
+    if(profileId){
+      profileSel.value=profileId;
+      vendorProfileSelectChanged(profileId);
+    }
+    if(quote) fillFieldIfBlank('f-ven-scope', quote.scope);
+  }else{
+    profileSel.value=profileSel.value||'';
+  }
+}
 const vVal = id => { const e=vEl(id); return e?e.value.trim():''; };
 const toast = (msg,d=2600) => { const t=vEl('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),d); };
 
@@ -1161,7 +1284,7 @@ const SEED = {
     {id:'q5',vendor:'LA Seismic Retrofit Group',   scope:'SMRF connection inspection & testing',  ref:'CBC §1705.12 · AISC 341',        csi:'Div 05',    amount:98400, date:'2026-03-15',status:'new',         files:[],payMilestones:[]},
   ],
   plans:[],
-  invoices:[], vendors:[], clientContracts:[], clientInvoices:[],
+  invoices:[], vendors:[], vendorProfiles:[], clientContracts:[], clientInvoices:[],
   checklist:[
     // ── Water Supply ──
     {id:'chk01',name:'Verify copper Type L piping for all water supply lines',category:'Water Supply',priority:'high',dueDate:'',assignee:'Plumbing Contractor',notes:'All piping to be non-combustible metallic material per CPC §609',status:'open'},
@@ -1244,6 +1367,7 @@ function normalizeDB(input){
     p.inspections.forEach(i=>{if(!i.files)i.files=[];});
     if(!p.invoices)p.invoices=[];
     if(!p.vendors)p.vendors=[];
+    if(!p.vendorProfiles)p.vendorProfiles=[];
     if(!p.clientContracts)p.clientContracts=[];
     if(!p.clientInvoices)p.clientInvoices=[];
     if(!p.checklist)p.checklist=[];
@@ -1917,8 +2041,8 @@ async function bootstrapSupabase(){
 //  NAVIGATION
 // ══════════════════════════════════════════════════════════════════
 let curPage = 'projects';
-const PAGE_TITLES = {projects:'All Projects',dashboard:'Dashboard Overview',works:'Works at Site',milestones:'Project Milestones',quotes:'Quotes Received',plans:'Plans & Documents',inspections:'Inspections Scheduled',payments:'Payments',invoices:'Invoice Tracker',vendors:'Vendor Contracts',clientcontracts:'Client Contracts',clientinvoices:'Client Invoices',checklist:'Project Checklist',qaqc:'QA/QC Log',compliance:'Compliance Tracker',export:'Export & Download'};
-const NEEDS_PROJECT = ['dashboard','works','milestones','quotes','plans','inspections','payments','invoices','vendors','clientcontracts','checklist','qaqc','compliance','export'];
+const PAGE_TITLES = {projects:'All Projects',dashboard:'Dashboard Overview',works:'Works at Site',milestones:'Project Milestones',quotes:'Quotes Received',plans:'Plans & Documents',inspections:'Inspections Scheduled',payments:'Payments',invoices:'Invoice Tracker',vendorprofiles:'Vendor Directory',vendors:'Vendor Contracts',clientcontracts:'Client Contracts',clientinvoices:'Client Invoices',checklist:'Project Checklist',qaqc:'QA/QC Log',compliance:'Compliance Tracker',export:'Export & Download'};
+const NEEDS_PROJECT = ['dashboard','works','milestones','quotes','plans','inspections','payments','invoices','vendorprofiles','vendors','clientcontracts','checklist','qaqc','compliance','export'];
 
 function buildSidebarNav(){
   const cu=currentUser();
@@ -1928,6 +2052,12 @@ function buildSidebarNav(){
     const pg=li.dataset.page;
     li.style.display=pages.includes(pg)||pg==='projects'?'':'none';
   });
+  const navList=document.querySelector('.sb-nav');
+  const vendorItem=navList?.querySelector('li[data-page="vendorprofiles"]');
+  const quotesItem=navList?.querySelector('li[data-page="quotes"]');
+  if(navList&&vendorItem&&quotesItem&&vendorItem!==quotesItem.previousElementSibling){
+    navList.insertBefore(vendorItem, quotesItem);
+  }
 }
 
 function nav(page) {
@@ -1938,7 +2068,7 @@ function nav(page) {
   document.querySelectorAll('.sb-nav a').forEach(a=>a.classList.remove('on'));
   vEl('n-'+page)?.classList.add('on');
   vEl('page-title').textContent = PAGE_TITLES[page]||page;
-  const addMap = {projects:'+ New Project',works:'+ Add Work',milestones:'+ Add Milestone',quotes:'+ Add Quote',plans:'+ Upload Doc',inspections:'+ Add Inspection',payments:'',invoices:'',vendors:'',clientcontracts:'',clientinvoices:'',checklist:'',qaqc:'',compliance:'',export:''};
+  const addMap = {projects:'+ New Project',works:'+ Add Work',milestones:'+ Add Milestone',quotes:'+ Add Quote',plans:'+ Upload Doc',inspections:'+ Add Inspection',payments:'',invoices:'',vendorprofiles:'',vendors:'',clientcontracts:'',clientinvoices:'',checklist:'',qaqc:'',compliance:'',export:''};
   const addModal = {projects:'project',works:'work',milestones:'milestone',quotes:'quote',plans:'plan',inspections:'inspection'};
   const btn=vEl('add-btn');
   if(addMap[page]){btn.style.display=''; btn.textContent=addMap[page]; btn.onclick=()=>openModal(addModal[page]);}
@@ -1985,7 +2115,7 @@ function renderAll(){
   },50);
   updateSidebar(); renderProjects(); renderDashboard(); renderWorks();
   renderMilestones(); renderQuotes(); renderPlans(); renderInspections();
-  renderPayments(); renderInvoices(); renderVendors(); renderClientContracts(); renderClientInvoices(); renderChecklist(); renderQAQC(); renderCompliance(); renderExport();
+  renderPayments(); renderInvoices(); renderVendorProfiles(); renderVendors(); renderClientContracts(); renderClientInvoices(); renderChecklist(); renderQAQC(); renderCompliance(); renderExport();
 }
 
 function updateSidebar(){
@@ -2001,6 +2131,7 @@ function updateSidebar(){
     vEl('ct-ins').textContent=(p.inspections||[]).length;
     vEl('ct-pay').textContent=(p.quotes||[]).filter(q=>q.status==='approved').length;
     vEl('ct-inv').textContent=(p.invoices||[]).length;
+    vEl('ct-vp').textContent=(p.vendorProfiles||[]).length;
     vEl('ct-ven').textContent=(p.vendors||[]).length;
     vEl('ct-cc').textContent=(p.clientContracts||[]).length;
     vEl('ct-ci').textContent=(DB.projects||[]).reduce((sum,pr)=>sum+((pr.clientInvoices||[]).length),0);
@@ -2864,7 +2995,7 @@ let mMode=null, mId=null, mPending=[];
 function openModal(type, id=null){
   mMode=type; mId=id; mPending=[];
   const p=proj();
-  const titles={project:'Project',work:'Work Item',milestone:'Milestone',quote:'Quote',plan:'Upload Document',inspection:'Inspection',qfiles:'Attach Files',insfiles:'Attach Reports',paymilestone:'Payment Milestone',payproof:'Proof of Payment',payinvoice:'Invoice',lienwvr:'Lien Waiver',msprogpay:'Progress Payment',msppfiles:'Proof of Payment',markpp:'Mark as Received',invoice:'Invoice',invfiles:'Invoice Files',invproof:'Proof of Payment',ppfiles:'Payment Supporting Files',vendor:'Vendor Contract',venfiles:'Contract Files','chklist-cat':'Manage Categories','chklist-item':'Checklist Item','qaqc-item':'QA/QC Entry',qafiles:'QA/QC Files'};
+  const titles={project:'Project',work:'Work Item',milestone:'Milestone',quote:'Quote',plan:'Upload Document',inspection:'Inspection',qfiles:'Attach Files',insfiles:'Attach Reports',paymilestone:'Payment Milestone',payproof:'Proof of Payment',payinvoice:'Invoice',lienwvr:'Lien Waiver',msprogpay:'Progress Payment',msppfiles:'Proof of Payment',markpp:'Mark as Received',invoice:'Invoice',invfiles:'Invoice Files',invproof:'Proof of Payment',ppfiles:'Payment Supporting Files',vendor:'Vendor Contract',vendorprofile:'Vendor',venfiles:'Contract Files','chklist-cat':'Manage Categories','chklist-item':'Checklist Item','qaqc-item':'QA/QC Entry',qafiles:'QA/QC Files'};
   vEl('modal-title').textContent=(id&&!id.includes('|')?'Edit ':'Add ')+titles[type];
   let html='';
 
@@ -2928,6 +3059,7 @@ function openModal(type, id=null){
   } else if(type==='quote'){
     const o=id?((p&&p.quotes)||[]).find(x=>x.id===id):{};
     if(o.files) mPending=[...o.files], regFiles(mPending);
+    const profileOpts=vendorProfileOptionsHTML(o.vendorProfileId||findVendorProfileIdByName(o.vendor||'', p), p, '-- Select vendor from Vendor Directory --');
 
     const csiOpts=['Div 01 — General Requirements','Div 02 — Existing Conditions','Div 03 — Concrete','Div 04 — Masonry','Div 05 — Metals / Structural Steel','Div 06 — Wood & Plastics','Div 07 — Thermal & Moisture Protection','Div 08 — Openings / Doors & Windows','Div 09 — Finishes','Div 10 — Specialties','Div 11 — Equipment','Div 12 — Furnishings','Div 13 — Special Construction','Div 14 — Conveying Equipment','Div 21 — Fire Suppression','Div 22 — Plumbing','Div 23 — HVAC','Div 25 — Integrated Automation','Div 26 — Electrical','Div 27 — Communications','Div 28 — Electronic Safety','Div 31 — Earthwork','Div 32 — Exterior Improvements','Div 33 — Utilities','Div 48 — Electrical Power Generation'].map(d=>`<option value="${d}"${(o.csi||'')=== d?' selected':''}>${d}</option>`).join('');
 
@@ -2936,7 +3068,7 @@ function openModal(type, id=null){
     const statusCfg=[['new','New'],['review','Under Review'],['approved','Approved'],['negotiating','Negotiating']];
 
     html=`
-      <div class="fr"><label class="fl">Vendor / Subcontractor Name *</label><input class="fi" id="f-vendor" value="${o.vendor||''}" placeholder="e.g. Pacific Coast HVAC Inc."/></div>
+      <div class="fr"><label class="fl">Vendor / Subcontractor Name *</label><select class="fs" id="f-vendor-profile" onchange="quoteVendorSelected(this.options[this.selectedIndex]?.textContent||'')">${profileOpts}</select><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:5px"><div style="font-size:10px;color:var(--muted)">Vendor name is selected from Vendor Directory only.</div><button type="button" class="btn btn-ghost btn-xs" style="font-size:10px" onclick="closeModal();nav('vendorprofiles')">Open Vendor Directory</button></div></div>
       <div class="fr"><label class="fl">Scope of Work</label><input class="fi" id="f-scope" value="${o.scope||''}" placeholder="e.g. Central mechanical system — all floors"/></div>
       <div class="fg">
         <div class="fr">
@@ -3153,6 +3285,7 @@ function openModal(type, id=null){
     const o=id?(p2&&p2.invoices||[]).find(x=>x.id===id):{};
     const approved2=(p2&&p2.quotes||[]).filter(q=>q.status==='approved');
     const allVendors=(p2&&p2.vendors||[]);
+    const manualVendorOpts=vendorProfileOptionsHTML(o.vendorProfileId||findVendorProfileIdByName(o.vendor||'', p2), p2, '-- Select vendor from Vendor Directory --');
     // Build vendor options: approved quotes + standalone vendor contracts + manual
     const vendorOpts=approved2.map(q=>`<option value="${q.id}" data-name="${q.vendor}" ${(o.quoteId||'')=== q.id?' selected':''}>${q.vendor} — Contract (${fmtMoney(q.amount)})</option>`).join('');
     // Vendor contracts not linked to quotes
@@ -3184,9 +3317,8 @@ function openModal(type, id=null){
             <option value="">-- Select from contracts --</option>
             ${vendorOpts}
             ${vcOpts}
-            <option value="__other__">Other / Manual Name</option>
           </select>
-          <input class="fi" id="f-inv-vname" placeholder="Or type vendor name" value="${approved2.find(q=>q.id===o.quoteId)?'':o.vendor||''}" style="margin-top:5px"/>
+          <div style="margin-top:5px;font-size:10px;color:var(--muted)">Use Manual / No Contract below if this invoice is for a saved vendor without a linked contract.</div>
         </div>
         <div class="fr">
           <label class="fl">Against Milestone <span style="font-size:9px;color:var(--muted)">(from Vendor Contract)</span></label>
@@ -3201,7 +3333,8 @@ function openModal(type, id=null){
       <!-- Manual / No Contract section -->
       <div id="inv-manual-section" style="display:none">
         <div class="fr"><label class="fl">Vendor / Company Name *</label>
-          <input class="fi" id="f-inv-manual-vendor" value="${o.vendor||''}" placeholder="e.g. ABC Plumbing Co."/>
+          <select class="fs" id="f-inv-manual-vendor">${manualVendorOpts}</select>
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:5px"><div style="font-size:10px;color:var(--muted)">Manual invoices also use saved vendors from Vendor Directory.</div><button type="button" class="btn btn-ghost btn-xs" style="font-size:10px" onclick="closeModal();nav('vendorprofiles')">Open Vendor Directory</button></div>
         </div>
         <div class="fr"><label class="fl">Work / Service Description</label>
           <input class="fi" id="f-inv-manual-scope" value="${o.manualScope||''}" placeholder="e.g. Rough-in plumbing, Electrical fixtures…"/>
@@ -3302,11 +3435,41 @@ function openModal(type, id=null){
     return;
   }
 
+  if(type==='vendorprofile'){
+    const p2=proj();
+    const o=id?(p2&&p2.vendorProfiles||[]).find(x=>x.id===id):{};
+    vEl('modal-title').textContent=(id?'Edit':'Add')+' Vendor';
+    html=`
+      <div class="fg">
+        <div class="fr"><label class="fl">Vendor / Company Name *</label><input class="fi" id="f-vp-name" value="${o.vendor||''}" placeholder="e.g. ABC Plumbing Co."/></div>
+        <div class="fr"><label class="fl">Vendor Email</label><input class="fi" id="f-vp-email" type="email" value="${o.vendorEmail||''}" placeholder="vendor@company.com"/></div>
+      </div>
+      <div class="fg">
+        <div class="fr"><label class="fl">Bank Name</label><input class="fi" id="f-vp-bank" value="${o.bankName||''}" placeholder="e.g. Chase Bank"/></div>
+        <div class="fr"><label class="fl">Account Type</label><select class="fs" id="f-vp-accttype">${['Checking','Savings','Business Checking','Business Savings'].map(t=>`<option ${(o.bankAcctType||'Checking')===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      </div>
+      <div class="fg">
+        <div class="fr"><label class="fl">Account Number</label><input class="fi" id="f-vp-acct" type="text" value="${o.bankAccount||''}" placeholder="e.g. 123456789"/></div>
+        <div class="fr"><label class="fl">Routing Number</label><input class="fi" id="f-vp-routing" type="text" value="${o.routingNo||''}" placeholder="9-digit routing number"/></div>
+      </div>
+      <div class="fg">
+        <div class="fr"><label class="fl">Zelle Phone / Email</label><input class="fi" id="f-vp-zelle" value="${o.zelleId||''}" placeholder="Phone or email registered with Zelle"/></div>
+        <div class="fr"><label class="fl">Wire / ACH Reference</label><input class="fi" id="f-vp-wire" value="${o.wireRef||''}" placeholder="Optional memo or reference"/></div>
+      </div>
+      <div class="fr"><label class="fl">Vendor Notes</label><textarea class="ft" id="f-vp-notes" style="min-height:60px">${o.notes||''}</textarea></div>`;
+    vEl('modal-body').innerHTML=html;
+    vEl('mo').classList.add('open');
+    mId=id||null; mMode='vendorprofile';
+    return;
+  }
+
   if(type==='vendor'){
     const p2=proj();
     const o=id?(p2&&p2.vendors||[]).find(x=>x.id===id):{};
     const approved2=(p2&&p2.quotes||[]).filter(q=>q.status==='approved');
     const vendorOpts=approved2.map(q=>`<option value="${q.id}" ${(o.quoteId||'')=== q.id?' selected':''}>${q.vendor}</option>`).join('');
+    const linkedQuote=approved2.find(q=>q.id===o.quoteId);
+    const profileOpts=vendorProfileOptionsHTML(o.vendorProfileId||(linkedQuote&&linkedQuote.vendorProfileId)||findVendorProfileIdByName(o.vendor||'', p2), p2, '-- Select vendor from Vendor Directory --');
     const contractTypes=['Lump Sum','Unit Price','Cost Plus','GMP','Time & Materials','Design-Build','Other'];
     const statuses=[['draft','Draft'],['signed','Signed'],['active','Active'],['on-hold','On Hold'],['expired','Expired'],['terminated','Terminated']];
     _venMilestones=[...(o.milestones||[]).map(ms=>({...ms}))];
@@ -3322,12 +3485,15 @@ function openModal(type, id=null){
       <!-- ── Vendor & Contract Info ── -->
       <div style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid var(--navy)">1. Contract Parties</div>
       <div class="fr"><label class="fl">Subcontractor / Vendor *</label>
-        <select class="fs" id="f-ven-qid" onchange="(function(s){var n=document.getElementById('f-ven-name');var o=s.options[s.selectedIndex];if(o.value&&o.value!='__other__')n.value='';else n.value=n.value;})(this)">
+        <select class="fs" id="f-ven-qid" onchange="vendorContractQuoteSelected(this)">
           <option value="">-- Select from approved quotes --</option>
           ${vendorOpts}
-          <option value="__other__" ${!approved2.find(q=>q.id===o.quoteId)&&o.vendor?'selected':''}>Other / Manual Entry</option>
+          <option value="__other__" ${!approved2.find(q=>q.id===o.quoteId)&&o.vendor?'selected':''}>Saved Vendor (No Quote)</option>
         </select>
-        <input class="fi" id="f-ven-name" placeholder="Or type vendor name manually" value="${approved2.find(q=>q.id===o.quoteId)?'':o.vendor||''}" style="margin-top:5px"/>
+        <select class="fs" id="f-ven-profile" style="margin-top:5px" onchange="vendorProfileSelectChanged(this.value)">
+          ${profileOpts}
+        </select>
+        <div style="font-size:10px;color:var(--muted);margin-top:5px">Add the vendor once in Vendor Directory, then choose it here from the dropdown.</div>
       </div>
       <div class="fr"><label class="fl">Vendor Email Address</label>
         <input class="fi" id="f-ven-email" type="email" value="${o.vendorEmail||''}" placeholder="vendor@company.com"/>
@@ -3405,6 +3571,7 @@ function openModal(type, id=null){
       </div>`;
     vEl('modal-body').innerHTML=html;
     vEl('mo').classList.add('open');
+    if(vEl('f-ven-profile')?.value) vendorProfileSelectChanged(vEl('f-ven-profile').value);
     mId=id||null; mMode='vendor';
     return;
   }
@@ -3414,10 +3581,11 @@ function openModal(type, id=null){
     const o=id?(p2&&p2.clientContracts||[]).find(x=>x.id===id):{};
     const billingTypes=['Lump Sum','Milestone Based','Cost Plus','Retainer','Time & Materials','Unit Price','Other'];
     const statuses=['Draft','Sent','Signed','Active','Completed','Closed'];
+    const clientNameListHTML=datalistHTML('client-name-options', getSavedNameOptions('client'));
     vEl('modal-title').textContent=(id?'Edit':'Add')+' Client Contract';
     html=`
       <div class="fg">
-        <div class="fr"><label class="fl">Client Name *</label><input class="fi" id="f-cc-client" value="${o.clientName||''}" placeholder="e.g. John Smith / ABC Development"/></div>
+        <div class="fr"><label class="fl">Client / Company Name *</label><input class="fi" id="f-cc-client" list="client-name-options" value="${o.clientName||''}" placeholder="e.g. John Smith / ABC Development"/>${clientNameListHTML}</div>
         <div class="fr"><label class="fl">Client Email</label><input class="fi" id="f-cc-email" type="email" value="${o.clientEmail||''}" placeholder="client@example.com"/></div>
       </div>
       <div class="fg">
@@ -3465,10 +3633,11 @@ function openModal(type, id=null){
     const linkedContract=(p2&&p2.clientContracts||[]).find(c=>c.id===o.contractId);
     const contractOpts=(p2&&p2.clientContracts||[]).map(c=>`<option value="${c.id}" ${o.contractId===c.id?'selected':''}>${c.contractTitle||c.clientName||'Contract'}</option>`).join('');
     const statuses=['Draft','Sent','Viewed','Paid','Partial','Overdue','Cancelled'];
+    const clientNameListHTML=datalistHTML('client-name-options', getSavedNameOptions('client'));
     vEl('modal-title').textContent=(id?'Edit':'Add')+' Client Invoice';
     html=`
       <div class="fg">
-        <div class="fr"><label class="fl">Client Name *</label><input class="fi" id="f-ci-client" value="${o.clientName||''}" placeholder="e.g. John Smith / ABC Development"/></div>
+        <div class="fr"><label class="fl">Client / Company Name *</label><input class="fi" id="f-ci-client" list="client-name-options" value="${o.clientName||''}" placeholder="e.g. John Smith / ABC Development"/>${clientNameListHTML}</div>
         <div class="fr"><label class="fl">Client Contract</label><select class="fs" id="f-ci-contract"><option value="">-- Optional linked contract --</option>${contractOpts}</select></div>
       </div>
       <div class="fg">
@@ -3782,8 +3951,8 @@ async function saveModal(){
     const color=document.querySelector('.cswatch.sel')?.dataset.color||COLORS[0];
     const street=vVal('f-street'),city=vVal('f-city'),state=vVal('f-state'),zip=vVal('f-zip'),county=vVal('f-county');
     const address=[street,city,state,zip].filter(Boolean).join(', ');
-    const o={id:mId||('proj_'+uid()),name,street,city,county,state,zip,address,permit:vVal('f-permit'),apn:vVal('f-apn'),type:vVal('f-type'),color,works:[],milestones:[],quotes:[],plans:[],inspections:[],invoices:[],vendors:[],clientContracts:[],clientInvoices:[],checklist:[],qaqcLog:[]};
-    if(mId){const idx=DB.projects.findIndex(x=>x.id===mId);if(idx>-1){['works','milestones','quotes','plans','inspections','invoices','vendors','clientContracts','clientInvoices','checklist','qaqcLog','chkCategories'].forEach(k=>o[k]=DB.projects[idx][k]);DB.projects[idx]=o;}}
+    const o={id:mId||('proj_'+uid()),name,street,city,county,state,zip,address,permit:vVal('f-permit'),apn:vVal('f-apn'),type:vVal('f-type'),color,works:[],milestones:[],quotes:[],plans:[],inspections:[],invoices:[],vendors:[],vendorProfiles:[],clientContracts:[],clientInvoices:[],checklist:[],qaqcLog:[]};
+    if(mId){const idx=DB.projects.findIndex(x=>x.id===mId);if(idx>-1){['works','milestones','quotes','plans','inspections','invoices','vendors','vendorProfiles','clientContracts','clientInvoices','checklist','qaqcLog','chkCategories'].forEach(k=>o[k]=DB.projects[idx][k]);DB.projects[idx]=o;}}
     else{DB.projects.push(o);DB.activeId=o.id;}
 
   } else if(mMode==='work'&&p){
@@ -3801,10 +3970,13 @@ async function saveModal(){
     if(mId){const i=p.milestones.findIndex(x=>x.id===mId);if(i>-1)p.milestones[i]=o;}else p.milestones.push(o);
 
   } else if(mMode==='quote'&&p){
-    const vendor=vVal('f-vendor'); if(!vendor){toast('⚠ Vendor name required');return;}
+    const vendorProfileId=vVal('f-vendor-profile');
+    const vendorProfile=getVendorProfileById(vendorProfileId, p);
+    if(!vendorProfile){toast('⚠ Select a vendor from Vendor Directory first');return;}
+    const vendor=vendorProfile.vendor;
     const ex=mId?(p.quotes||[]).find(x=>x.id===mId):null;
     const refVal=vEl('f-ref-custom')?.style.display!=='none'?vVal('f-ref-custom'):vVal('f-ref');
-    const o={id:mId||uid(),vendor,scope:vVal('f-scope'),ref:refVal,csi:vVal('f-csi'),amount:parseFloat(vVal('f-amount'))||0,date:vVal('f-date'),status:vVal('f-status'),files:[...mPending],payMilestones:ex?ex.payMilestones||[]:[],};
+    const o={id:mId||uid(),vendorProfileId,vendor,scope:vVal('f-scope'),ref:refVal,csi:vVal('f-csi'),amount:parseFloat(vVal('f-amount'))||0,date:vVal('f-date'),status:vVal('f-status'),files:[...mPending],payMilestones:ex?ex.payMilestones||[]:[],};
     if(!p.quotes)p.quotes=[];
     if(mId){const i=p.quotes.findIndex(x=>x.id===mId);if(i>-1)p.quotes[i]=o;}else p.quotes.push(o);
 
@@ -3877,30 +4049,34 @@ async function saveModal(){
     // Determine if manual or contract-based
     const manualSec=document.getElementById('inv-manual-section');
     const isManual=manualSec&&manualSec.style.display!=='none';
-    let qid='', vcId='', vendorName='', manualScope='';
+    let qid='', vcId='', vendorName='', manualScope='', vendorProfileId='';
     if(isManual){
-      vendorName=(vEl('f-inv-manual-vendor')?.value||'').trim();
+      vendorProfileId=vVal('f-inv-manual-vendor');
+      const vendorProfile=getVendorProfileById(vendorProfileId, p);
+      vendorName=vendorProfile?vendorProfile.vendor:'';
       manualScope=(vEl('f-inv-manual-scope')?.value||'').trim();
-      if(!vendorName){toast('⚠ Please enter vendor/company name');return;}
+      if(!vendorName){toast('⚠ Select a vendor from Vendor Directory');return;}
     } else {
       const qselEl=vEl('f-inv-vendor');
       const rawQid=qselEl?.value||'';
       if(rawQid.startsWith('vc_')){
-        // Vendor contract without quote
         vcId=rawQid.replace('vc_','');
         const vc=(p.vendors||[]).find(v=>v.id===vcId);
-        vendorName=vc?vc.vendor:(vEl('f-inv-vname')?.value.trim()||'');
+        vendorName=vc?vc.vendor:'';
+        vendorProfileId=vc&&vc.vendorProfileId?vc.vendorProfileId:findVendorProfileIdByName(vendorName, p);
       } else {
-        qid=rawQid!=='__other__'?rawQid:'';
-        vendorName=qid?(p.quotes||[]).find(q=>q.id===qid)?.vendor||(vEl('f-inv-vname')?.value.trim()||''):(vEl('f-inv-vname')?.value.trim()||'');
+        qid=rawQid;
+        const quote=qid?(p.quotes||[]).find(q=>q.id===qid):null;
+        vendorName=quote?quote.vendor:'';
+        vendorProfileId=quote&&quote.vendorProfileId?quote.vendorProfileId:findVendorProfileIdByName(vendorName, p);
       }
-      if(!vendorName){toast('⚠ Please select or enter a subcontractor name');return;}
+      if(!vendorName){toast('⚠ Please select a subcontractor from the dropdown');return;}
     }
     const invNo=vVal('f-inv-no'); if(!invNo){toast('⚠ Invoice number required');return;}
     const amt=parseFloat(vVal('f-inv-amt'))||0; if(!amt){toast('⚠ Amount required');return;}
     const ex=mId?(p.invoices||[]).find(x=>x.id===mId):null;
     const milestoneId=vVal('f-inv-milestone')||'';
-    const o={id:mId||uid(),vendor:vendorName,quoteId:qid,vcId,isManual:isManual||false,manualScope:manualScope||'',milestoneId,invoiceNo:invNo,amount:amt,invoiceDate:vVal('f-inv-date'),dueDate:vVal('f-inv-due'),description:vVal('f-inv-desc'),approvalStatus:ex?ex.approvalStatus:'pending',paid:ex?ex.paid:false,paidDate:ex?ex.paidDate:'',partialPayments:ex?ex.partialPayments||[]:[],files:ex?ex.files||[]:[],lienFiles:ex?ex.lienFiles||[]:[],};
+    const o={id:mId||uid(),vendorProfileId,vendor:vendorName,quoteId:qid,vcId,isManual:isManual||false,manualScope:manualScope||'',milestoneId,invoiceNo:invNo,amount:amt,invoiceDate:vVal('f-inv-date'),dueDate:vVal('f-inv-due'),description:vVal('f-inv-desc'),approvalStatus:ex?ex.approvalStatus:'pending',paid:ex?ex.paid:false,paidDate:ex?ex.paidDate:'',partialPayments:ex?ex.partialPayments||[]:[],files:ex?ex.files||[]:[],lienFiles:ex?ex.lienFiles||[]:[],};
     if(!p.invoices)p.invoices=[]; if(!p.vendors)p.vendors=[]; if(!p.checklist)p.checklist=[]; if(!p.qaqcLog)p.qaqcLog=[]; if(!p.chkCategories)p.chkCategories=[]; (p.checklist||[]).forEach(it=>{(it.comments||[]).forEach(c=>regFiles(c.files||[]));}); (p.qaqcLog||[]).forEach(it=>regFiles(it.files||[])); (p.checklist||[]).forEach(it=>{if(!it.comments)it.comments=[];});
     if(mId){const i=p.invoices.findIndex(x=>x.id===mId);if(i>-1)p.invoices[i]=o;}else p.invoices.push(o);
     saveDB();
@@ -3908,6 +4084,15 @@ async function saveModal(){
     nav('payments');
     toast('Invoice booked');
     return;
+  } else if(mMode==='vendorprofile'&&p){
+    const vendor=vVal('f-vp-name');
+    if(!vendor){toast('⚠ Vendor name required');return;}
+    const duplicate=(p.vendorProfiles||[]).find(x=>lookupKey(x.vendor)===lookupKey(vendor)&&x.id!==mId);
+    if(duplicate){toast('⚠ This vendor already exists in Vendor Directory');return;}
+    const ex=mId?(p.vendorProfiles||[]).find(x=>x.id===mId):null;
+    const o={id:mId||uid(),vendor,vendorEmail:vVal('f-vp-email'),bankAccount:vVal('f-vp-acct'),routingNo:vVal('f-vp-routing'),bankName:vVal('f-vp-bank'),bankAcctType:vVal('f-vp-accttype'),zelleId:vVal('f-vp-zelle'),wireRef:vVal('f-vp-wire'),notes:vVal('f-vp-notes')};
+    if(!p.vendorProfiles)p.vendorProfiles=[];
+    if(mId){const i=p.vendorProfiles.findIndex(x=>x.id===mId);if(i>-1)p.vendorProfiles[i]=o;}else p.vendorProfiles.push(o);
   } else if(mMode==='clientcontract'&&p){
     const clientName=vVal('f-cc-client');
     const contractTitle=vVal('f-cc-title');
@@ -3935,12 +4120,31 @@ async function saveModal(){
   } else if(mMode==='vendor'&&p){
     const qselEl=vEl('f-ven-qid');
     const qid=qselEl?.value!=='__other__'?qselEl?.value||'':'';
-    const vname=qid?(p.quotes||[]).find(q=>q.id===qid)?.vendor||(vEl('f-ven-name')?.value.trim()||''):(vEl('f-ven-name')?.value.trim()||'');
-    if(!vname){toast('⚠ Vendor name required');return;}
+    let vendorProfileId=vVal('f-ven-profile');
+    if(qid){
+      const quote=(p.quotes||[]).find(q=>q.id===qid);
+      if(quote&&quote.vendorProfileId) vendorProfileId=quote.vendorProfileId;
+      else if(quote) vendorProfileId=findVendorProfileIdByName(quote.vendor, p);
+    }
+    const profile=getVendorProfileById(vendorProfileId, p);
+    const vname=qid?(p.quotes||[]).find(q=>q.id===qid)?.vendor||(profile&&profile.vendor)||'':(profile&&profile.vendor)||'';
+    if(!vname||!vendorProfileId){toast('⚠ Select a vendor from Vendor Directory');return;}
     const ex=mId?(p.vendors||[]).find(x=>x.id===mId):null;
-    const o={id:mId||uid(),vendor:vname,quoteId:qid,vendorEmail:vVal('f-ven-email'),contractNo:vVal('f-ven-no'),amount:parseFloat(vVal('f-ven-amt'))||0,contractType:vVal('f-ven-type'),status:vVal('f-ven-status'),startDate:vVal('f-ven-start'),endDate:vVal('f-ven-end'),scope:vVal('f-ven-scope'),exclusions:vVal('f-ven-exclusions'),notes:vVal('f-ven-notes'),bankAccount:vVal('f-ven-acct'),routingNo:vVal('f-ven-routing'),bankName:vVal('f-ven-bank'),bankAcctType:vVal('f-ven-accttype'),zelleId:vVal('f-ven-zelle'),wireRef:vVal('f-ven-wire'),milestones:_venMilestones.filter(ms=>!ms._deleted&&ms.name),files:ex?ex.files||[]:[],};
+    const o={id:mId||uid(),vendorProfileId,vendor:vname,quoteId:qid,vendorEmail:vVal('f-ven-email'),contractNo:vVal('f-ven-no'),amount:parseFloat(vVal('f-ven-amt'))||0,contractType:vVal('f-ven-type'),status:vVal('f-ven-status'),startDate:vVal('f-ven-start'),endDate:vVal('f-ven-end'),scope:vVal('f-ven-scope'),exclusions:vVal('f-ven-exclusions'),notes:vVal('f-ven-notes'),bankAccount:vVal('f-ven-acct'),routingNo:vVal('f-ven-routing'),bankName:vVal('f-ven-bank'),bankAcctType:vVal('f-ven-accttype'),zelleId:vVal('f-ven-zelle'),wireRef:vVal('f-ven-wire'),milestones:_venMilestones.filter(ms=>!ms._deleted&&ms.name),files:ex?ex.files||[]:[],};
     if(!p.vendors)p.vendors=[];
     if(mId){const i=p.vendors.findIndex(x=>x.id===mId);if(i>-1)p.vendors[i]=o;}else p.vendors.push(o);
+    const vendorProfile=(p.vendorProfiles||[]).find(x=>x.id===vendorProfileId);
+    if(vendorProfile){
+      vendorProfile.vendor=vname;
+      vendorProfile.vendorEmail=vVal('f-ven-email');
+      vendorProfile.bankAccount=vVal('f-ven-acct');
+      vendorProfile.routingNo=vVal('f-ven-routing');
+      vendorProfile.bankName=vVal('f-ven-bank');
+      vendorProfile.bankAcctType=vVal('f-ven-accttype');
+      vendorProfile.zelleId=vVal('f-ven-zelle');
+      vendorProfile.wireRef=vVal('f-ven-wire');
+      vendorProfile.notes=vVal('f-ven-notes');
+    }
   } else if(mMode==='venfiles'&&p){
     const v=(p.vendors||[]).find(x=>x.id===mId); if(v)v.files=[...mPending];
   } else if(mMode==='ppfiles'&&p){
@@ -5238,6 +5442,45 @@ function _doInvExcel(p){
 
 // ════ VENDOR CONTRACTS ═══════════════════════════════════════════════
 
+function renderVendorProfiles(){
+  const p=proj(); if(!p) return;
+  const profiles=p.vendorProfiles||[];
+  const el=vEl('vp-content'); if(!el) return;
+  vEl('ct-vp').textContent=profiles.length;
+  if(!profiles.length){
+    el.innerHTML=`<div class="empty"><div class="empty-ic">VD</div>No vendors saved yet. Open this tab first to add a vendor, then choose that vendor from dropdowns in quotes, contracts, and invoices.</div>`;
+    return;
+  }
+  el.innerHTML=profiles.map(v=>`<div class="panel" style="margin-bottom:14px">
+      <div class="ph" style="background:var(--blue)">
+        <div>
+          <span class="ph-title" style="color:#fff;font-size:14px">${v.vendor}</span>
+          ${v.vendorEmail?`<span style="font-size:11px;color:#DDEBFA;margin-left:8px">${v.vendorEmail}</span>`:''}
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-xs" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2);font-size:10px" onclick="openModal('vendorprofile','${v.id}')">Edit</button>
+          <button class="btn btn-xs" style="background:rgba(180,30,30,.3);color:#F09595;border:1px solid rgba(180,30,30,.4);font-size:10px" onclick="delVendorProfile('${v.id}')">Delete</button>
+        </div>
+      </div>
+      <div style="padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px">
+        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Bank Name</div><div style="font-size:12px">${v.bankName||'—'}</div></div>
+        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Account Type</div><div style="font-size:12px">${v.bankAcctType||'—'}</div></div>
+        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Routing</div><div style="font-size:12px">${v.routingNo||'—'}</div></div>
+        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Zelle</div><div style="font-size:12px">${v.zelleId||'—'}</div></div>
+        ${v.notes?`<div style="grid-column:1/-1"><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Notes</div><div style="font-size:11px;color:var(--text)">${v.notes}</div></div>`:''}
+      </div>
+    </div>`).join('');
+}
+
+function delVendorProfile(id){
+  const p=proj(); if(!p) return;
+  const inUse=(p.quotes||[]).some(q=>q.vendorProfileId===id)||(p.vendors||[]).some(v=>v.vendorProfileId===id)||(p.invoices||[]).some(inv=>inv.vendorProfileId===id);
+  if(inUse){toast('⚠ This vendor is used in quotes, contracts, or invoices');return;}
+  if(!confirm('Delete this saved vendor?')) return;
+  p.vendorProfiles=(p.vendorProfiles||[]).filter(x=>x.id!==id);
+  saveDB(); renderAll(); toast('Deleted');
+}
+
 function renderVendors(){
   const p=proj(); if(!p) return;
   const vendors=p.vendors||[];
@@ -5246,7 +5489,7 @@ function renderVendors(){
   vendors.forEach(v=>regFiles(v.files||[]));
 
   if(!vendors.length){
-    el.innerHTML=`<div class="empty"><div class="empty-ic">🤝</div>No vendors added yet. Click + Add Vendor to start.</div>`;
+    el.innerHTML=`<div class="empty"><div class="empty-ic">🤝</div>No vendor contracts added yet. Save a vendor in Vendor Directory first, then click + Add Contract here.</div>`;
     return;
   }
 
@@ -5580,41 +5823,85 @@ function printClientInvoice(cid){
   const ctx=getClientInvoiceContext(cid);
   if(!ctx.project||!ctx.invoice){toast('Client invoice not found');return;}
   const p=ctx.project, inv=ctx.invoice, contract=ctx.contract||{};
+  const invoiceNo=inv.invoiceNo||'Client Invoice';
+  const projectAddress=p.address||[p.street,p.city,p.state,p.zip].filter(Boolean).join(', ');
+  const billLines=[
+    inv.clientName||contract.clientName||'-',
+    inv.clientEmail||contract.clientEmail||'',
+    projectAddress||''
+  ].filter(Boolean);
+  const detailLines=[
+    contract.contractTitle||contract.contractNo?`Contract: ${esc(contract.contractTitle||contract.contractNo)}`:'',
+    `Invoice Status: ${esc(inv.status||'Draft')}`,
+    `Invoice Amount: ${esc(fmtMoney(inv.amount||0))}`,
+    `Balance Due: ${esc(fmtMoney(inv.balanceDue||0))}`,
+    inv.dueDate?`Payment Due: ${esc(fmtDate(inv.dueDate))}`:''
+  ].filter(Boolean).map(line=>`<div style="margin-bottom:4px">${line}</div>`).join('');
   const body=`
-    <div class="top">
-      <div>
-        <div class="brand">LIVIO LEGACY AI</div>
-        <div class="sub">Client invoice</div>
+    <div style="font-family:Arial,sans-serif;color:#222;max-width:900px;margin:0 auto;padding:24px 28px">
+      <div style="font-size:30px;font-weight:700;color:#2E75B6;letter-spacing:.3px">LIVIO BUILDING SYSTEM</div>
+      <div style="font-size:34px;font-weight:700;margin:10px 0 26px">INVOICE</div>
+
+      <table style="width:100%;border-collapse:collapse;border:1px solid #cfcfcf;margin-bottom:22px">
+        <tr>
+          <td style="width:50%;vertical-align:top;border-right:1px solid #cfcfcf;padding:16px 18px">
+            <div style="font-weight:700;margin-bottom:6px">Invoice Number:</div>
+            <div style="margin-bottom:14px">${esc(invoiceNo)}</div>
+            <div style="font-weight:700;margin-bottom:6px">Invoice Date:</div>
+            <div>${esc(fmtDate(inv.invoiceDate))}</div>
+            <div style="font-weight:700;margin:14px 0 6px">Due Date:</div>
+            <div>${esc(inv.dueDate?fmtDate(inv.dueDate):'-')}</div>
+          </td>
+          <td style="width:50%;vertical-align:top;padding:16px 18px">
+            <div style="font-weight:700;margin-bottom:6px">Bill To:</div>
+            ${billLines.map(line=>`<div style="margin-bottom:4px">${esc(line)}</div>`).join('')}
+          </td>
+        </tr>
+      </table>
+
+      <table style="width:100%;border-collapse:collapse;border:1px solid #cfcfcf;margin-bottom:22px">
+        <tr style="background:#2E75B6;color:#fff">
+          <th style="text-align:left;padding:10px 12px;font-size:14px">Description</th>
+          <th style="width:120px;text-align:center;padding:10px 12px;font-size:14px">Quantity</th>
+          <th style="width:160px;text-align:right;padding:10px 12px;font-size:14px">Amount</th>
+        </tr>
+        <tr>
+          <td style="vertical-align:top;border-top:1px solid #cfcfcf;border-right:1px solid #cfcfcf;padding:12px">
+            <div style="font-weight:700;margin-bottom:6px">${esc(contract.contractTitle||contract.contractNo||p.name||'Client Billing')}</div>
+            ${p.name?`<div style="margin-bottom:4px">Project: ${esc(p.name)}</div>`:''}
+            ${projectAddress?`<div style="margin-bottom:8px">Location: ${esc(projectAddress)}</div>`:''}
+            <div style="white-space:pre-wrap;line-height:1.45">${esc(inv.description||'No description provided.')}</div>
+          </td>
+          <td style="text-align:center;vertical-align:middle;border-top:1px solid #cfcfcf;border-right:1px solid #cfcfcf;padding:12px">1</td>
+          <td style="text-align:right;vertical-align:middle;border-top:1px solid #cfcfcf;padding:12px;font-weight:700">${esc(fmtMoney(inv.amount||0))}</td>
+        </tr>
+        <tr style="background:#f2f2f2">
+          <td style="border-top:1px solid #cfcfcf;padding:12px"></td>
+          <td style="border-top:1px solid #cfcfcf;padding:12px;text-align:right;font-weight:700">TOTAL:</td>
+          <td style="border-top:1px solid #cfcfcf;padding:12px;text-align:right;font-size:20px;font-weight:700">${esc(fmtMoney(inv.amount||0))}</td>
+        </tr>
+      </table>
+
+      <div style="margin-bottom:18px">
+        <div style="font-size:20px;font-weight:700;margin-bottom:8px">Billing Detail:</div>
+        <div style="line-height:1.5">${detailLines}</div>
       </div>
-      <div class="meta">
-        <div><strong>Project:</strong> ${esc(p.name||'-')}</div>
-        <div><strong>Address:</strong> ${esc(p.address||'-')}</div>
-        <div><strong>Generated:</strong> ${esc(new Date().toLocaleDateString())}</div>
+
+      <div style="margin-bottom:18px">
+        <div style="font-size:18px;font-weight:700;margin-bottom:8px">Payment Terms:</div>
+        <div>${inv.dueDate?`Payment is due by ${esc(fmtDate(inv.dueDate))}.`:'Payment is due upon receipt of this invoice.'}</div>
       </div>
-    </div>
-    <div class="title">${esc(inv.invoiceNo||'Client Invoice')}</div>
-    <div class="sub">Status: ${esc(inv.status||'Draft')}</div>
-    <div class="grid">
-      <div class="box">
-        <div class="label">Bill To</div>
-        <div class="value">${esc(inv.clientName||contract.clientName||'-')}</div>
-        <div class="value-sm">${esc(inv.clientEmail||contract.clientEmail||'-')}</div>
+
+      ${inv.notes?`
+      <div style="margin-bottom:18px">
+        <div style="font-size:18px;font-weight:700;margin-bottom:8px">Additional Notes:</div>
+        <div style="white-space:pre-wrap;line-height:1.5">${esc(inv.notes)}</div>
       </div>
-      <div class="box">
-        <div class="label">Linked Contract</div>
-        <div class="value">${esc(contract.contractTitle||contract.contractNo||'-')}</div>
-        <div class="value-sm">Invoice Date: ${esc(fmtDate(inv.invoiceDate))}<br/>Due Date: ${esc(fmtDate(inv.dueDate))}</div>
-      </div>
-    </div>
-    <div class="stats">
-      <div class="stat"><div class="stat-k">Invoice Amount</div><div class="stat-v">${esc(fmtMoney(inv.amount||0))}</div></div>
-      <div class="stat"><div class="stat-k">Balance Due</div><div class="stat-v">${esc(fmtMoney(inv.balanceDue||0))}</div></div>
-      <div class="stat"><div class="stat-k">Project</div><div class="stat-v" style="font-size:16px">${esc(p.name||'-')}</div></div>
-    </div>
-    <div class="section"><h3>Description</h3><p>${esc(inv.description||'No description provided.')}</p></div>
-    ${inv.notes?`<div class="section"><h3>Notes</h3><p>${esc(inv.notes)}</p></div>`:''}
-    <div class="footer">Generated by Livio Legacy AI</div>`;
-  openPrintDocument((inv.invoiceNo||'Client Invoice')+' PDF',body);
+      `:''}
+
+      <div style="margin-top:34px;color:#666;font-style:italic">Thank you for your business!</div>
+    </div>`;
+  openPrintDocument(invoiceNo+' PDF',body);
   toast('Client invoice opened. Print to Save as PDF.');
 }
 
@@ -5690,7 +5977,48 @@ function getClientInvoiceContext(cid){
 }
 
 async function downloadClientInvoicePDF(cid){
-  printClientInvoice(cid);
+  const ctx=getClientInvoiceContext(cid);
+  if(!ctx.project||!ctx.invoice){toast('Client invoice not found');return;}
+  const client=initSupabaseClient();
+  if(!client){
+    printClientInvoice(cid);
+    return;
+  }
+  try{
+    const res=await fetch(client.baseUrl+'/client-invoices/pdf',{
+      method:'POST',
+      headers:{
+        Accept:'application/pdf',
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify({project:ctx.project,invoice:ctx.invoice,contract:ctx.contract||null})
+    });
+    if(!res.ok){
+      let message='PDF download failed';
+      try{
+        const data=await res.json();
+        if(data&&data.error) message=data.error;
+      }catch(_e){}
+      throw new Error(message);
+    }
+    const blob=await res.blob();
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    const safeName=((ctx.project.name||'project')+'_'+(ctx.invoice.invoiceNo||'invoice'))
+      .replace(/[^a-z0-9_-]+/gi,'_')
+      .replace(/^_+|_+$/g,'')+'.pdf';
+    link.href=url;
+    link.download=safeName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    toast('Client invoice PDF downloaded');
+  }catch(e){
+    console.error('client invoice pdf download error:',e);
+    toast('PDF download failed. Opening print view instead.');
+    printClientInvoice(cid);
+  }
 }
 
 async function sendClientInvoiceEmailRequest(ctx){
@@ -6106,7 +6434,7 @@ const PERMS_KEY='livio_perms_v1';
 const ALL_PAGES=[
   {id:'projects',label:'All Projects'},{id:'dashboard',label:'Dashboard'},
   {id:'works',label:'Works at Site'},{id:'milestones',label:'Milestones'},
-  {id:'quotes',label:'Quotes'},{id:'plans',label:'Plans & Docs'},
+  {id:'vendorprofiles',label:'Vendor Directory'},{id:'quotes',label:'Quotes'},{id:'plans',label:'Plans & Docs'},
   {id:'inspections',label:'Inspections'},{id:'vendors',label:'Vendor Contracts'},
   {id:'clientcontracts',label:'Client Contracts'},
   {id:'clientinvoices',label:'Client Invoices'},
@@ -6128,11 +6456,17 @@ function getUserPages(user){
   if(!userPerms) return ALL_PAGES.map(p=>p.id); // default: show all pages, no restrictions until admin sets them
   // Support both old array format and new object format
   if(Array.isArray(userPerms)){
-    return userPerms.length ? userPerms : ALL_PAGES.map(p=>p.id);
+    const visible=new Set(userPerms.length ? userPerms : ALL_PAGES.map(p=>p.id));
+    visible.add('vendorprofiles');
+    return ALL_PAGES.map(p=>p.id).filter(id=>visible.has(id));
   }
   // New format: object {pageId:'full'|'view'|'none'}
-  const allowed=Object.entries(userPerms).filter(([k,v])=>v==='full'||v==='view').map(([k])=>k);
-  return allowed.length ? allowed : ALL_PAGES.map(p=>p.id);
+  return ALL_PAGES
+    .filter(pg=>{
+      const lvl=userPerms[pg.id];
+      return !lvl || lvl==='full' || lvl==='view';
+    })
+    .map(pg=>pg.id);
 }
 
 function getPageAccess(user, pageId){
@@ -6140,7 +6474,7 @@ function getPageAccess(user, pageId){
   const perms=getPerms();
   const userPerms=perms[user.id];
   if(!userPerms) return 'full'; // no perms set = full access by default
-  if(Array.isArray(userPerms)) return userPerms.includes(pageId)?'full':'none';
+  if(Array.isArray(userPerms)) return pageId==='vendorprofiles'||userPerms.includes(pageId)?'full':'none';
   // New object format
   const lvl=userPerms[pageId];
   if(!lvl) return 'full'; // page not in perms = full access
