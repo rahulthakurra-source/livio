@@ -624,8 +624,14 @@ tr:hover .row-actions{opacity:1}
 
       <div class="panel" id="pay-ledger-panel" style="display:none;margin-bottom:18px">
         <div class="ph" style="background:var(--navy)">
-          <span class="ph-title" style="color:#fff">📒 Payment Ledger — All Subcontractors</span>
-          <span style="font-size:10px;color:#8AAAC8">Contract · Paid · Balance per subcontractor</span>
+          <div>
+            <span class="ph-title" style="color:#fff">📒 Payment Ledger — All Subcontractors</span>
+            <span style="font-size:10px;color:#8AAAC8">Contract · Paid · Balance per subcontractor</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-xs" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2);font-size:10px" onclick="exportPaymentLedgerPDF()">🖨 PDF</button>
+            <button class="btn btn-xs" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2);font-size:10px" onclick="exportPaymentLedgerExcel()">📊 Excel</button>
+          </div>
         </div>
         <div id="pay-ledger"></div>
       </div>
@@ -663,8 +669,13 @@ tr:hover .row-actions{opacity:1}
     <div class="page" id="pg-clientinvoices">
       <div class="sh">
         <div><div class="sh-title">Client Invoices</div><div class="sh-sub">Invoices sent to owners or clients for billing and collections</div></div>
-        <button class="btn btn-navy" onclick="openModal('clientinvoice')">+ Add Client Invoice</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="exportClientInvoiceLedgerPDF()">🖨 PDF</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportClientInvoiceLedgerExcel()">📊 Excel</button>
+          <button class="btn btn-navy" onclick="openModal('clientinvoice')">+ Add Client Invoice</button>
+        </div>
       </div>
+      <div id="ci-ledger"></div>
       <div id="ci-content"></div>
     </div>
 
@@ -1103,6 +1114,7 @@ const localDateStr = (d=new Date()) => {
 const fmtBytes = b => b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB';
 const fileIcon = n => ({pdf:'📄',dwg:'📐',dxf:'📐',png:'🖼',jpg:'🖼',jpeg:'🖼',xlsx:'📊',xls:'📊',docx:'📝',doc:'📝',zip:'🗜',rvt:'🏗',ifc:'🏗'}[n.split('.').pop().toLowerCase()]||'📎');
 const vEl = id => document.getElementById(id);
+const hasVal = v => !(v===undefined||v===null||String(v)==='');
 function uniqNames(values){
   const seen=new Set(), out=[];
   (values||[]).forEach(value=>{
@@ -1127,6 +1139,7 @@ function getSavedNameOptions(kind){
       (p.vendors||[]).forEach(v=>values.push(v.vendor));
       (p.invoices||[]).forEach(inv=>values.push(inv.vendor));
     }else if(kind==='client'){
+      values.push(p.clientOwnerName);
       (p.clientContracts||[]).forEach(c=>values.push(c.clientName));
       (p.clientInvoices||[]).forEach(inv=>values.push(inv.clientName));
     }
@@ -1185,13 +1198,6 @@ function vendorProfileSelected(name){
   fillFieldIfBlank('f-ven-scope', profile.scope);
   fillFieldIfBlank('f-ven-exclusions', profile.exclusions);
   fillFieldIfBlank('f-ven-notes', profile.notes);
-  fillFieldIfBlank('f-ven-bank', profile.bankName);
-  fillFieldIfBlank('f-ven-acct', profile.bankAccount);
-  fillFieldIfBlank('f-ven-routing', profile.routingNo);
-  fillFieldIfBlank('f-ven-zelle', profile.zelleId);
-  fillFieldIfBlank('f-ven-wire', profile.wireRef);
-  const acctType=vEl('f-ven-accttype');
-  if(acctType&&profile.bankAcctType&&(acctType.value==='Checking'||!acctType.value)) acctType.value=profile.bankAcctType;
   const contractType=vEl('f-ven-type');
   if(contractType&&profile.contractType&&(contractType.value==='Lump Sum'||!contractType.value)) contractType.value=profile.contractType;
 }
@@ -1216,7 +1222,86 @@ function vendorContractQuoteSelected(sel){
     profileSel.value=profileSel.value||'';
   }
 }
+function vendorProfileWebsiteHref(value){
+  const raw=String(value||'').trim();
+  if(!raw) return '';
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
 const vVal = id => { const e=vEl(id); return e?e.value.trim():''; };
+function getClientInvoiceLinkedContract(p, contractId=''){
+  return ((p&&p.clientContracts)||[]).find(c=>c.id===contractId)||null;
+}
+function nextClientInvoiceNumber(p){
+  const max=((p&&p.clientInvoices)||[]).reduce((out, inv)=>{
+    const match=String(inv.invoiceNo||'').match(/(\d+)(?!.*\d)/);
+    const num=match?parseInt(match[1],10):0;
+    return Number.isFinite(num)&&num>out?num:out;
+  },0);
+  return 'INV-'+String(max+1).padStart(3,'0');
+}
+function buildClientInvoiceDefaults(p, contractId=''){
+  const contract=getClientInvoiceLinkedContract(p, contractId);
+  const amount=hasVal(contract&&contract.amount)?String(contract.amount):'';
+  const label=(contract&&(contract.contractTitle||contract.contractNo))||(p&&p.name)||'';
+  return {
+    clientName:String((p&&p.clientOwnerName)||(contract&&contract.clientName)||'').trim(),
+    clientEmail:String((p&&p.clientOwnerEmail)||(contract&&contract.clientEmail)||'').trim(),
+    invoiceNo:nextClientInvoiceNumber(p),
+    status:'Draft',
+    amount,
+    balanceDue:amount,
+    invoiceDate:localDateStr(),
+    dueDate:'',
+    description:label?`Billing for ${label}`:'',
+    notes:''
+  };
+}
+function clientInvoiceApplyAutofill(p, force=false){
+  if(!p) return;
+  const contractEl=vEl('f-ci-contract');
+  if(!contractEl) return;
+  let prevDefaults={};
+  try{ prevDefaults=JSON.parse(contractEl.dataset.prevDefaults||'{}')||{}; }catch(e){}
+  const defaults=buildClientInvoiceDefaults(p, contractEl.value||'');
+  [
+    ['f-ci-client','clientName'],
+    ['f-ci-email','clientEmail'],
+    ['f-ci-no','invoiceNo'],
+    ['f-ci-status','status'],
+    ['f-ci-amt','amount'],
+    ['f-ci-bal','balanceDue'],
+    ['f-ci-date','invoiceDate'],
+    ['f-ci-due','dueDate'],
+    ['f-ci-desc','description'],
+    ['f-ci-notes','notes']
+  ].forEach(([id,key])=>{
+    const el=vEl(id);
+    if(!el) return;
+    const current=String(el.value||'');
+    const prev=String(prevDefaults[key]??'');
+    const next=String(defaults[key]??'');
+    if(force||!current||current===prev) el.value=next;
+  });
+  contractEl.dataset.prevDefaults=JSON.stringify(defaults);
+}
+function clientInvoiceReceivedToggle(sync=true){
+  const chk=vEl('f-ci-received');
+  const dateEl=vEl('f-ci-received-date');
+  const statusEl=vEl('f-ci-status');
+  const balEl=vEl('f-ci-bal');
+  const amtEl=vEl('f-ci-amt');
+  if(!chk||!dateEl) return;
+  dateEl.disabled=!chk.checked;
+  dateEl.style.opacity=chk.checked?'1':'.65';
+  if(chk.checked){
+    if(!dateEl.value) dateEl.value=localDateStr();
+    if(statusEl) statusEl.value='Paid';
+    if(balEl) balEl.value='0';
+  }else if(sync){
+    if(statusEl&&statusEl.value==='Paid') statusEl.value='Draft';
+    if(balEl&&!balEl.value&&(amtEl?.value||'')) balEl.value=amtEl.value;
+  }
+}
 const toast = (msg,d=2600) => { const t=vEl('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),d); };
 
 function statusBadge(s) {
@@ -2042,7 +2127,7 @@ async function bootstrapSupabase(){
 // ══════════════════════════════════════════════════════════════════
 let curPage = 'projects';
 const PAGE_TITLES = {projects:'All Projects',dashboard:'Dashboard Overview',works:'Works at Site',milestones:'Project Milestones',quotes:'Quotes Received',plans:'Plans & Documents',inspections:'Inspections Scheduled',payments:'Payments',invoices:'Invoice Tracker',vendorprofiles:'Vendor Directory',vendors:'Vendor Contracts',clientcontracts:'Client Contracts',clientinvoices:'Client Invoices',checklist:'Project Checklist',qaqc:'QA/QC Log',compliance:'Compliance Tracker',export:'Export & Download'};
-const NEEDS_PROJECT = ['dashboard','works','milestones','quotes','plans','inspections','payments','invoices','vendorprofiles','vendors','clientcontracts','checklist','qaqc','compliance','export'];
+const NEEDS_PROJECT = ['dashboard','works','milestones','quotes','plans','inspections','payments','invoices','vendorprofiles','vendors','clientcontracts','clientinvoices','checklist','qaqc','compliance','export'];
 
 function buildSidebarNav(){
   const cu=currentUser();
@@ -2134,7 +2219,7 @@ function updateSidebar(){
     vEl('ct-vp').textContent=(p.vendorProfiles||[]).length;
     vEl('ct-ven').textContent=(p.vendors||[]).length;
     vEl('ct-cc').textContent=(p.clientContracts||[]).length;
-    vEl('ct-ci').textContent=(DB.projects||[]).reduce((sum,pr)=>sum+((pr.clientInvoices||[]).length),0);
+    vEl('ct-ci').textContent=(p.clientInvoices||[]).length;
     vEl('ct-chk').textContent=(p.checklist||[]).length;
     vEl('ct-qaqc').textContent=(p.qaqcLog||[]).length;
   }
@@ -2175,6 +2260,62 @@ function renderProjects(){
   grid.innerHTML=html;
 }
 function switchProj(id){ setProj(id); nav('dashboard'); }
+function getClientInvoiceLedgerData(p){
+  const entries=((p&&p.clientInvoices||[]).map(inv=>({
+    project:p,
+    invoice:inv,
+    linked:getClientInvoiceLinkedContract(p, inv.contractId||'')
+  }))).slice().sort((a,b)=>{
+    const ad=(a.invoice.invoiceDate||a.invoice.dueDate||'');
+    const bd=(b.invoice.invoiceDate||b.invoice.dueDate||'');
+    return String(bd).localeCompare(String(ad)) || String(b.invoice.invoiceNo||'').localeCompare(String(a.invoice.invoiceNo||''));
+  });
+  let totalInvoiced=0, totalPaid=0, totalBalance=0, overdueCount=0;
+  const today=new Date();
+  entries.forEach(({invoice:inv})=>{
+    const amount=Number(inv.amount||0);
+    const balance=Math.max(0, Number(inv.balanceDue||0));
+    totalInvoiced+=amount;
+    totalBalance+=balance;
+    totalPaid+=Math.max(0, amount-balance);
+    if(balance>0&&inv.dueDate&&new Date(inv.dueDate+'T12:00:00')<today&&(inv.status||'Draft')!=='Paid'&&(inv.status||'Draft')!=='Cancelled') overdueCount++;
+  });
+  return {entries,totalInvoiced,totalPaid,totalBalance,overdueCount};
+}
+function buildClientInvoiceLedgerHTML(p, options={}){
+  const data=getClientInvoiceLedgerData(p);
+  const limit=Number(options.limit||0);
+  const emptyMsg=options.emptyMsg||'No client invoices yet for this project.';
+  if(!data.entries.length){
+    return `<div class="empty"><div class="empty-ic">INV</div>${emptyMsg}</div>`;
+  }
+  const rows=(limit?data.entries.slice(0,limit):data.entries).map(({project,invoice:inv,linked},idx)=>{
+    const amount=Number(inv.amount||0);
+    const balance=Math.max(0, Number(inv.balanceDue||0));
+    const client=inv.clientName||project.clientOwnerName||'Client';
+    const email=inv.clientEmail||project.clientOwnerEmail||(linked&&linked.clientEmail)||'-';
+    const status=inv.status||'Draft';
+    const rowBg=idx%2===0?'#fff':'var(--bg)';
+    const statusBg=status==='Paid'?'rgba(16,185,129,.12)':status==='Overdue'?'rgba(180,30,30,.12)':'rgba(12,27,46,.08)';
+    const statusColor=status==='Paid'?'#0f766e':status==='Overdue'?'#9f1239':'var(--navy)';
+    return `<tr style="background:${rowBg}">
+      <td style="padding:8px 10px;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700;color:var(--navy)">${inv.invoiceNo||'Client Invoice'}</div><div style="font-size:10px;color:var(--muted)">${client}</div></td>
+      <td style="padding:8px 10px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text)">${email}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);white-space:nowrap">${inv.invoiceDate?fmtDate(inv.invoiceDate):'-'}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid var(--border);font-size:10px;color:${balance>0&&inv.dueDate&&new Date(inv.dueDate+'T12:00:00')<new Date()?'var(--red)':'var(--muted)'};white-space:nowrap">${inv.dueDate?fmtDate(inv.dueDate):'-'}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap">${fmtMoney(amount)}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;color:${balance>0?'#9f1239':'#0f766e'};white-space:nowrap">${fmtMoney(balance)}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid var(--border)"><span style="background:${statusBg};color:${statusColor};font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid rgba(12,27,46,.08)">${status}</span></td>
+    </tr>`;
+  }).join('');
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px">
+      <div class="mc" style="--ac:var(--blue)"><div class="mc-lbl">Total Invoiced</div><div class="mc-val" style="color:var(--blue)">${fmtMoney(data.totalInvoiced)}</div><div class="mc-sub">${data.entries.length} invoices</div></div>
+      <div class="mc" style="--ac:var(--green)"><div class="mc-lbl">Received</div><div class="mc-val" style="color:var(--green)">${fmtMoney(data.totalPaid)}</div><div class="mc-sub">Amount collected</div></div>
+      <div class="mc" style="--ac:var(--red)"><div class="mc-lbl">Outstanding</div><div class="mc-val" style="color:var(--red)">${fmtMoney(data.totalBalance)}</div><div class="mc-sub">Still due</div></div>
+      <div class="mc" style="--ac:var(--amber)"><div class="mc-lbl">Overdue</div><div class="mc-val" style="color:var(--amber)">${data.overdueCount}</div><div class="mc-sub">Past due invoices</div></div>
+    </div>
+    <div class="tw"><table><thead><tr><th>Invoice</th><th>Client Email</th><th>Invoice Date</th><th>Due Date</th><th>Amount</th><th>Balance</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
 
 // ── DASHBOARD ──
 function renderDashboard(){
@@ -2698,7 +2839,7 @@ function renderPayments(){
   renderPayPieChart(sources, p);
   if(!sources.length){
     listEl.innerHTML=''; emptyEl.style.display=''; 
-    if(ledgerPanel)ledgerPanel.style.display='none';
+    if(ledgerPanel) ledgerPanel.style.display='none';
     vEl('bs-c').textContent=fmtMoney(0); vEl('bs-p').textContent=fmtMoney(0);
     vEl('bs-b').textContent=fmtMoney(0); vEl('bs-pct').textContent='0%';
     vEl('bs-bar').style.width='0%';
@@ -2725,7 +2866,6 @@ function renderPayments(){
   vEl('bs-bar').style.width=pct+'%';
   vEl('bs-bar').style.background=pct===100?'#9FE1CB':pct>60?'#85B7EB':'#FAC775';
 
-  // Ledger
   if(ledgerPanel&&ledgerEl){
     ledgerPanel.style.display='';
     ledgerEl.innerHTML=_buildPayLedgerHTML(sources,totalContract,totalPaid,p);
@@ -3005,6 +3145,10 @@ function openModal(type, id=null){
     const tyOpts=['R-3 Single-Family Residential','R-2 Multi-Family Residential','B Office / Mixed-Use','A Assembly','E Educational','F Factory / Industrial','I Institutional','M Mercantile','S Storage','U Utility'].map(t=>`<option value="${t}"${(o.type||'')===t?' selected':''}>${t}</option>`).join('');
     html=`
       <div class="fr"><label class="fl">Project Name *</label><input class="fi" id="f-name" value="${o.name||''}" placeholder="e.g. 1510 Madera Drive"/></div>
+      <div class="fg">
+        <div class="fr"><label class="fl">Client / Owner Name</label><input class="fi" id="f-client-owner" value="${o.clientOwnerName||''}" placeholder="e.g. John Smith / ABC Development"/></div>
+        <div class="fr"><label class="fl">Client / Owner Email</label><input class="fi" id="f-client-owner-email" type="email" value="${o.clientOwnerEmail||''}" placeholder="client@example.com"/></div>
+      </div>
       <div class="fr"><label class="fl">Street Address</label><input class="fi" id="f-street" value="${o.street||o.address||''}" placeholder="e.g. 1510 Madera Drive" oninput="cityLookup()"/></div>
       <div class="fg">
         <div class="fr"><label class="fl">City <span id="city-ok" style="font-size:9px;color:var(--green);font-weight:700;margin-left:4px"></span></label><input class="fi" id="f-city" value="${o.city||''}" placeholder="e.g. Cupertino" oninput="cityLookup()"/></div>
@@ -3445,6 +3589,10 @@ function openModal(type, id=null){
         <div class="fr"><label class="fl">Vendor Email</label><input class="fi" id="f-vp-email" type="email" value="${o.vendorEmail||''}" placeholder="vendor@company.com"/></div>
       </div>
       <div class="fg">
+        <div class="fr"><label class="fl">License Number</label><input class="fi" id="f-vp-license" value="${o.licenseNo||''}" placeholder="e.g. LIC-123456"/></div>
+        <div class="fr"><label class="fl">Company Website</label><input class="fi" id="f-vp-website" value="${o.website||''}" placeholder="e.g. www.vendor.com"/></div>
+      </div>
+      <div class="fg">
         <div class="fr"><label class="fl">Bank Name</label><input class="fi" id="f-vp-bank" value="${o.bankName||''}" placeholder="e.g. Chase Bank"/></div>
         <div class="fr"><label class="fl">Account Type</label><select class="fs" id="f-vp-accttype">${['Checking','Savings','Business Checking','Business Savings'].map(t=>`<option ${(o.bankAcctType||'Checking')===t?'selected':''}>${t}</option>`).join('')}</select></div>
       </div>
@@ -3526,42 +3674,6 @@ function openModal(type, id=null){
         <textarea class="ft" id="f-ven-notes" style="min-height:44px">${o.notes||''}</textarea>
       </div>
 
-      <!-- ── Banking / Payment Info ── -->
-      <div style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.6px;margin:14px 0 8px;padding-bottom:4px;border-bottom:2px solid #1A6BC4">5. Banking & Payment Information</div>
-      <div style="background:#F3F8FF;border:1px solid #B0D0F0;border-radius:8px;padding:14px">
-        <div class="fr">
-          <label class="fl">Bank Account Number</label>
-          <input class="fi" id="f-ven-acct" type="text" value="${o.bankAccount||''}" placeholder="e.g. 123456789" autocomplete="off"
-            style="letter-spacing:1px;font-family:monospace"/>
-        </div>
-        <div class="fr">
-          <label class="fl">Routing Number (ABA / ACH)</label>
-          <input class="fi" id="f-ven-routing" type="text" value="${o.routingNo||''}" placeholder="9-digit routing number e.g. 021000021" autocomplete="off"
-            style="letter-spacing:1px;font-family:monospace"/>
-        </div>
-        <div class="fr">
-          <label class="fl">Zelle Phone / Email</label>
-          <input class="fi" id="f-ven-zelle" value="${o.zelleId||''}" placeholder="Phone number or email registered with Zelle"/>
-        </div>
-        <div class="fr">
-          <label class="fl">Bank Name</label>
-          <input class="fi" id="f-ven-bank" value="${o.bankName||''}" placeholder="e.g. Chase Bank, Bank of America, Wells Fargo…"/>
-        </div>
-        <div class="fg">
-          <div class="fr"><label class="fl">Account Type</label>
-            <select class="fs" id="f-ven-accttype">
-              ${['Checking','Savings','Business Checking','Business Savings'].map(t=>`<option ${(o.bankAcctType||'Checking')===t?'selected':''}>${t}</option>`).join('')}
-            </select>
-          </div>
-          <div class="fr"><label class="fl">Wire / ACH Reference (optional)</label>
-            <input class="fi" id="f-ven-wire" value="${o.wireRef||''}" placeholder="Optional reference or memo"/>
-          </div>
-        </div>
-        <div style="margin-top:8px;padding:6px 10px;background:rgba(155,31,31,.06);border:1px solid rgba(155,31,31,.15);border-radius:5px;font-size:9px;color:#9B1F1F">
-          🔒 Sensitive — stored locally and only visible to Admin users.
-        </div>
-      </div>
-
       <!-- ── Payment Milestones ── -->
       <div style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.6px;margin:14px 0 8px;padding-bottom:4px;border-bottom:2px solid var(--navy)">4. Payment Milestones</div>
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
@@ -3579,15 +3691,18 @@ function openModal(type, id=null){
   if(type==='clientcontract'){
     const p2=proj();
     const o=id?(p2&&p2.clientContracts||[]).find(x=>x.id===id):{};
+    const defaultClientName=o.clientName||p2?.clientOwnerName||'';
+    const defaultClientEmail=o.clientEmail||p2?.clientOwnerEmail||'';
     const billingTypes=['Lump Sum','Milestone Based','Cost Plus','Retainer','Time & Materials','Unit Price','Other'];
     const statuses=['Draft','Sent','Signed','Active','Completed','Closed'];
     const clientNameListHTML=datalistHTML('client-name-options', getSavedNameOptions('client'));
     vEl('modal-title').textContent=(id?'Edit':'Add')+' Client Contract';
     html=`
       <div class="fg">
-        <div class="fr"><label class="fl">Client / Company Name *</label><input class="fi" id="f-cc-client" list="client-name-options" value="${o.clientName||''}" placeholder="e.g. John Smith / ABC Development"/>${clientNameListHTML}</div>
-        <div class="fr"><label class="fl">Client Email</label><input class="fi" id="f-cc-email" type="email" value="${o.clientEmail||''}" placeholder="client@example.com"/></div>
+        <div class="fr"><label class="fl">Client / Company Name *</label><input class="fi" id="f-cc-client" list="client-name-options" value="${defaultClientName}" placeholder="e.g. John Smith / ABC Development"/>${clientNameListHTML}</div>
+        <div class="fr"><label class="fl">Client Email</label><input class="fi" id="f-cc-email" type="email" value="${defaultClientEmail}" placeholder="client@example.com"/></div>
       </div>
+      ${p2?.clientOwnerName||p2?.clientOwnerEmail?`<div style="margin:-2px 0 12px;font-size:10px;color:var(--muted)">Client details are pulled from this project's setup and can still be adjusted here if needed.</div>`:''}
       <div class="fg">
         <div class="fr"><label class="fl">Contract Title *</label><input class="fi" id="f-cc-title" value="${o.contractTitle||''}" placeholder="e.g. Design-Build Agreement"/></div>
         <div class="fr"><label class="fl">Contract Number</label><input class="fi" id="f-cc-no" value="${o.contractNo||''}" placeholder="e.g. LIV-CC-2026-001"/></div>
@@ -3630,35 +3745,44 @@ function openModal(type, id=null){
     const p2=(ctx&&ctx.project)||proj();
     if(!p2){toast('Select a project first');closeModal();return;}
     const o=id?(p2&&p2.clientInvoices||[]).find(x=>x.id===id):{};
-    const linkedContract=(p2&&p2.clientContracts||[]).find(c=>c.id===o.contractId);
-    const contractOpts=(p2&&p2.clientContracts||[]).map(c=>`<option value="${c.id}" ${o.contractId===c.id?'selected':''}>${c.contractTitle||c.clientName||'Contract'}</option>`).join('');
+    const defaultContractId=hasVal(o.contractId)?o.contractId:(!id&&(p2&&p2.clientContracts||[]).length===1?(p2.clientContracts||[])[0].id:'');
+    const linkedContract=getClientInvoiceLinkedContract(p2, defaultContractId);
+    const defaults=buildClientInvoiceDefaults(p2, defaultContractId);
+    const contractOpts=(p2&&p2.clientContracts||[]).map(c=>`<option value="${c.id}" ${defaultContractId===c.id?'selected':''}>${c.contractTitle||c.clientName||'Contract'}</option>`).join('');
     const statuses=['Draft','Sent','Viewed','Paid','Partial','Overdue','Cancelled'];
     const clientNameListHTML=datalistHTML('client-name-options', getSavedNameOptions('client'));
     vEl('modal-title').textContent=(id?'Edit':'Add')+' Client Invoice';
     html=`
       <div class="fg">
-        <div class="fr"><label class="fl">Client / Company Name *</label><input class="fi" id="f-ci-client" list="client-name-options" value="${o.clientName||''}" placeholder="e.g. John Smith / ABC Development"/>${clientNameListHTML}</div>
-        <div class="fr"><label class="fl">Client Contract</label><select class="fs" id="f-ci-contract"><option value="">-- Optional linked contract --</option>${contractOpts}</select></div>
+        <div class="fr"><label class="fl">Client / Company Name *</label><input class="fi" id="f-ci-client" list="client-name-options" value="${hasVal(o.clientName)?o.clientName:defaults.clientName}" placeholder="e.g. John Smith / ABC Development"/>${clientNameListHTML}</div>
+        <div class="fr"><label class="fl">Client Contract</label><select class="fs" id="f-ci-contract" onchange="clientInvoiceApplyAutofill(proj(),false)"><option value="">-- Optional linked contract --</option>${contractOpts}</select></div>
       </div>
       <div class="fg">
-        <div class="fr"><label class="fl">Client Email</label><input class="fi" id="f-ci-email" type="email" value="${o.clientEmail||linkedContract?.clientEmail||''}" placeholder="client@example.com"/></div>
-        <div class="fr"><label class="fl">Status</label><select class="fs" id="f-ci-status">${statuses.map(t=>`<option ${o.status===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="fr"><label class="fl">Client Email</label><input class="fi" id="f-ci-email" type="email" value="${hasVal(o.clientEmail)?o.clientEmail:defaults.clientEmail}" placeholder="client@example.com"/></div>
+        <div class="fr"><label class="fl">Status</label><select class="fs" id="f-ci-status">${statuses.map(t=>`<option ${(hasVal(o.status)?o.status:defaults.status)===t?'selected':''}>${t}</option>`).join('')}</select></div>
       </div>
       <div class="fg">
-        <div class="fr"><label class="fl">Invoice Number *</label><input class="fi" id="f-ci-no" value="${o.invoiceNo||''}" placeholder="e.g. INV-2026-001"/></div>
+        <div class="fr"><label class="fl" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="f-ci-received" ${(o.paymentReceived||o.status==='Paid')?'checked':''} onchange="clientInvoiceReceivedToggle()"/> Payment Received</label></div>
+        <div class="fr"><label class="fl">Received Date</label><input class="fi" id="f-ci-received-date" type="date" value="${o.receivedDate||((o.paymentReceived||o.status==='Paid')?localDateStr():'')}"/></div>
+      </div>
+      ${p2?.clientOwnerName||p2?.clientOwnerEmail?`<div style="margin:-2px 0 12px;font-size:10px;color:var(--muted)">Client details come from this project's setup first, and you can still change them here for this invoice.</div>`:''}
+      <div class="fg">
+        <div class="fr"><label class="fl">Invoice Number *</label><input class="fi" id="f-ci-no" value="${hasVal(o.invoiceNo)?o.invoiceNo:defaults.invoiceNo}" placeholder="e.g. INV-2026-001"/></div>
         <div class="fr"></div>
       </div>
       <div class="fg">
-        <div class="fr"><label class="fl">Invoice Amount ($)</label><input class="fi" id="f-ci-amt" type="number" value="${o.amount||''}" placeholder="0"/></div>
-        <div class="fr"><label class="fl">Balance Due ($)</label><input class="fi" id="f-ci-bal" type="number" value="${o.balanceDue||''}" placeholder="0"/></div>
+        <div class="fr"><label class="fl">Invoice Amount ($)</label><input class="fi" id="f-ci-amt" type="number" value="${hasVal(o.amount)?o.amount:defaults.amount}" placeholder="0"/></div>
+        <div class="fr"><label class="fl">Balance Due ($)</label><input class="fi" id="f-ci-bal" type="number" value="${hasVal(o.balanceDue)?o.balanceDue:defaults.balanceDue}" placeholder="0"/></div>
       </div>
       <div class="fg">
-        <div class="fr"><label class="fl">Invoice Date</label><input class="fi" id="f-ci-date" type="date" value="${o.invoiceDate||''}"/></div>
-        <div class="fr"><label class="fl">Due Date</label><input class="fi" id="f-ci-due" type="date" value="${o.dueDate||''}"/></div>
+        <div class="fr"><label class="fl">Invoice Date</label><input class="fi" id="f-ci-date" type="date" value="${hasVal(o.invoiceDate)?o.invoiceDate:defaults.invoiceDate}"/></div>
+        <div class="fr"><label class="fl">Due Date</label><input class="fi" id="f-ci-due" type="date" value="${hasVal(o.dueDate)?o.dueDate:defaults.dueDate}"/></div>
       </div>
-      <div class="fr"><label class="fl">Description / Billing Notes</label><textarea class="ft" id="f-ci-desc" style="min-height:70px" placeholder="Describe what the client is being billed for...">${o.description||''}</textarea></div>
-      <div class="fr"><label class="fl">Internal Notes</label><textarea class="ft" id="f-ci-notes" style="min-height:50px">${o.notes||''}</textarea></div>`;
+      <div class="fr"><label class="fl">Description / Billing Notes</label><textarea class="ft" id="f-ci-desc" style="min-height:70px" placeholder="Describe what the client is being billed for...">${hasVal(o.description)?o.description:defaults.description}</textarea></div>
+      <div class="fr"><label class="fl">Internal Notes</label><textarea class="ft" id="f-ci-notes" style="min-height:50px">${hasVal(o.notes)?o.notes:defaults.notes}</textarea></div>`;
     vEl('modal-body').innerHTML=html;
+    clientInvoiceApplyAutofill(p2,false);
+    clientInvoiceReceivedToggle(false);
     vEl('mo').classList.add('open');
     mId=id||null; mMode='clientinvoice';
     return;
@@ -3951,7 +4075,7 @@ async function saveModal(){
     const color=document.querySelector('.cswatch.sel')?.dataset.color||COLORS[0];
     const street=vVal('f-street'),city=vVal('f-city'),state=vVal('f-state'),zip=vVal('f-zip'),county=vVal('f-county');
     const address=[street,city,state,zip].filter(Boolean).join(', ');
-    const o={id:mId||('proj_'+uid()),name,street,city,county,state,zip,address,permit:vVal('f-permit'),apn:vVal('f-apn'),type:vVal('f-type'),color,works:[],milestones:[],quotes:[],plans:[],inspections:[],invoices:[],vendors:[],vendorProfiles:[],clientContracts:[],clientInvoices:[],checklist:[],qaqcLog:[]};
+    const o={id:mId||('proj_'+uid()),name,clientOwnerName:vVal('f-client-owner'),clientOwnerEmail:vVal('f-client-owner-email'),street,city,county,state,zip,address,permit:vVal('f-permit'),apn:vVal('f-apn'),type:vVal('f-type'),color,works:[],milestones:[],quotes:[],plans:[],inspections:[],invoices:[],vendors:[],vendorProfiles:[],clientContracts:[],clientInvoices:[],checklist:[],qaqcLog:[]};
     if(mId){const idx=DB.projects.findIndex(x=>x.id===mId);if(idx>-1){['works','milestones','quotes','plans','inspections','invoices','vendors','vendorProfiles','clientContracts','clientInvoices','checklist','qaqcLog','chkCategories'].forEach(k=>o[k]=DB.projects[idx][k]);DB.projects[idx]=o;}}
     else{DB.projects.push(o);DB.activeId=o.id;}
 
@@ -4090,7 +4214,7 @@ async function saveModal(){
     const duplicate=(p.vendorProfiles||[]).find(x=>lookupKey(x.vendor)===lookupKey(vendor)&&x.id!==mId);
     if(duplicate){toast('⚠ This vendor already exists in Vendor Directory');return;}
     const ex=mId?(p.vendorProfiles||[]).find(x=>x.id===mId):null;
-    const o={id:mId||uid(),vendor,vendorEmail:vVal('f-vp-email'),bankAccount:vVal('f-vp-acct'),routingNo:vVal('f-vp-routing'),bankName:vVal('f-vp-bank'),bankAcctType:vVal('f-vp-accttype'),zelleId:vVal('f-vp-zelle'),wireRef:vVal('f-vp-wire'),notes:vVal('f-vp-notes')};
+    const o={id:mId||uid(),vendor,vendorEmail:vVal('f-vp-email'),licenseNo:vVal('f-vp-license'),website:vVal('f-vp-website'),bankAccount:vVal('f-vp-acct'),routingNo:vVal('f-vp-routing'),bankName:vVal('f-vp-bank'),bankAcctType:vVal('f-vp-accttype'),zelleId:vVal('f-vp-zelle'),wireRef:vVal('f-vp-wire'),notes:vVal('f-vp-notes')};
     if(!p.vendorProfiles)p.vendorProfiles=[];
     if(mId){const i=p.vendorProfiles.findIndex(x=>x.id===mId);if(i>-1)p.vendorProfiles[i]=o;}else p.vendorProfiles.push(o);
   } else if(mMode==='clientcontract'&&p){
@@ -4104,14 +4228,21 @@ async function saveModal(){
   } else if(mMode==='ccfiles'&&p){
     const c=(p.clientContracts||[]).find(x=>x.id===mId); if(c)c.files=[...mPending];
   } else if(mMode==='clientinvoice'&&p){
-    const clientName=vVal('f-ci-client');
-    const invoiceNo=vVal('f-ci-no');
+    const contractId=vVal('f-ci-contract')||'';
+    const clientDefaults=buildClientInvoiceDefaults(p, contractId);
+    const clientName=vVal('f-ci-client')||clientDefaults.clientName;
+    const invoiceNo=vVal('f-ci-no')||clientDefaults.invoiceNo;
     if(!clientName||!invoiceNo){toast('Client name and invoice number are required');return;}
     const ex=mId?(p.clientInvoices||[]).find(x=>x.id===mId):null;
-    const amount=parseFloat(vVal('f-ci-amt'))||0;
+    const amountInput=vVal('f-ci-amt');
+    const amount=amountInput===''&&hasVal(clientDefaults.amount)?(parseFloat(clientDefaults.amount)||0):(parseFloat(amountInput)||0);
     const balanceRaw=vVal('f-ci-bal');
-    const balanceDue=balanceRaw===''?amount:(parseFloat(balanceRaw)||0);
-    const o={id:mId||uid(),clientName,clientEmail:vVal('f-ci-email'),contractId:vVal('f-ci-contract')||'',invoiceNo,status:vVal('f-ci-status'),amount,balanceDue,invoiceDate:vVal('f-ci-date'),dueDate:vVal('f-ci-due'),description:vVal('f-ci-desc'),notes:vVal('f-ci-notes'),files:ex?ex.files||[]:[],emailedAt:ex?ex.emailedAt:'',emailLastSentTo:ex?ex.emailLastSentTo:''};
+    const paymentReceived=!!vEl('f-ci-received')?.checked;
+    const receivedDate=paymentReceived?(vVal('f-ci-received-date')||localDateStr()):'';
+    let balanceDue=balanceRaw===''?amount:(parseFloat(balanceRaw)||0);
+    let status=vVal('f-ci-status')||clientDefaults.status;
+    if(paymentReceived){balanceDue=0;status='Paid';}
+    const o={id:mId||uid(),clientName,clientEmail:vVal('f-ci-email')||clientDefaults.clientEmail,contractId,invoiceNo,status,amount,balanceDue,invoiceDate:vVal('f-ci-date')||clientDefaults.invoiceDate,dueDate:vVal('f-ci-due'),description:vVal('f-ci-desc')||clientDefaults.description,notes:vVal('f-ci-notes'),paymentReceived,receivedDate,files:ex?ex.files||[]:[],emailedAt:ex?ex.emailedAt:'',emailLastSentTo:ex?ex.emailLastSentTo:''};
     if(!p.clientInvoices)p.clientInvoices=[];
     if(mId){const i=p.clientInvoices.findIndex(x=>x.id===mId);if(i>-1)p.clientInvoices[i]=o;}else p.clientInvoices.push(o);
     if(o.status==='Sent'&&(!ex||ex.status!=='Sent')&&o.clientEmail) autoClientInvoiceId=o.id;
@@ -4130,19 +4261,13 @@ async function saveModal(){
     const vname=qid?(p.quotes||[]).find(q=>q.id===qid)?.vendor||(profile&&profile.vendor)||'':(profile&&profile.vendor)||'';
     if(!vname||!vendorProfileId){toast('⚠ Select a vendor from Vendor Directory');return;}
     const ex=mId?(p.vendors||[]).find(x=>x.id===mId):null;
-    const o={id:mId||uid(),vendorProfileId,vendor:vname,quoteId:qid,vendorEmail:vVal('f-ven-email'),contractNo:vVal('f-ven-no'),amount:parseFloat(vVal('f-ven-amt'))||0,contractType:vVal('f-ven-type'),status:vVal('f-ven-status'),startDate:vVal('f-ven-start'),endDate:vVal('f-ven-end'),scope:vVal('f-ven-scope'),exclusions:vVal('f-ven-exclusions'),notes:vVal('f-ven-notes'),bankAccount:vVal('f-ven-acct'),routingNo:vVal('f-ven-routing'),bankName:vVal('f-ven-bank'),bankAcctType:vVal('f-ven-accttype'),zelleId:vVal('f-ven-zelle'),wireRef:vVal('f-ven-wire'),milestones:_venMilestones.filter(ms=>!ms._deleted&&ms.name),files:ex?ex.files||[]:[],};
+    const o={id:mId||uid(),vendorProfileId,vendor:vname,quoteId:qid,vendorEmail:vVal('f-ven-email'),contractNo:vVal('f-ven-no'),amount:parseFloat(vVal('f-ven-amt'))||0,contractType:vVal('f-ven-type'),status:vVal('f-ven-status'),startDate:vVal('f-ven-start'),endDate:vVal('f-ven-end'),scope:vVal('f-ven-scope'),exclusions:vVal('f-ven-exclusions'),notes:vVal('f-ven-notes'),milestones:_venMilestones.filter(ms=>!ms._deleted&&ms.name),files:ex?ex.files||[]:[],};
     if(!p.vendors)p.vendors=[];
     if(mId){const i=p.vendors.findIndex(x=>x.id===mId);if(i>-1)p.vendors[i]=o;}else p.vendors.push(o);
     const vendorProfile=(p.vendorProfiles||[]).find(x=>x.id===vendorProfileId);
     if(vendorProfile){
       vendorProfile.vendor=vname;
       vendorProfile.vendorEmail=vVal('f-ven-email');
-      vendorProfile.bankAccount=vVal('f-ven-acct');
-      vendorProfile.routingNo=vVal('f-ven-routing');
-      vendorProfile.bankName=vVal('f-ven-bank');
-      vendorProfile.bankAcctType=vVal('f-ven-accttype');
-      vendorProfile.zelleId=vVal('f-ven-zelle');
-      vendorProfile.wireRef=vVal('f-ven-wire');
       vendorProfile.notes=vVal('f-ven-notes');
     }
   } else if(mMode==='venfiles'&&p){
@@ -5441,6 +5566,19 @@ function _doInvExcel(p){
 
 
 // ════ VENDOR CONTRACTS ═══════════════════════════════════════════════
+let vendorProfileSearchTerm='';
+
+function setVendorProfileSearch(value){
+  vendorProfileSearchTerm=String(value||'');
+  renderVendorProfiles();
+}
+
+function vendorProfileSearchFieldHTML(){
+  return `<div style="position:relative">
+    <input class="fi" value="${esc(vendorProfileSearchTerm)}" oninput="setVendorProfileSearch(this.value)" placeholder="Type full vendor or company name, email, license, website, or notes" style="padding-right:40px" autocomplete="off"/>
+    <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--muted);pointer-events:none">🔍</span>
+  </div>`;
+}
 
 function renderVendorProfiles(){
   const p=proj(); if(!p) return;
@@ -5451,7 +5589,30 @@ function renderVendorProfiles(){
     el.innerHTML=`<div class="empty"><div class="empty-ic">VD</div>No vendors saved yet. Open this tab first to add a vendor, then choose that vendor from dropdowns in quotes, contracts, and invoices.</div>`;
     return;
   }
-  el.innerHTML=profiles.map(v=>`<div class="panel" style="margin-bottom:14px">
+  const query=vendorProfileSearchTerm.trim().toLowerCase();
+  const filtered=!query?profiles:profiles.filter(v=>{
+    const haystack=[v.vendor,v.vendorEmail,v.licenseNo,v.website,v.bankName,v.notes].join(' ').toLowerCase();
+    return haystack.includes(query);
+  });
+  if(!filtered.length){
+    el.innerHTML=`
+      <div class="panel" style="margin-bottom:14px">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg)">
+          <label class="fl" style="margin-bottom:6px">Search Vendors</label>
+          ${vendorProfileSearchFieldHTML()}
+        </div>
+        <div class="empty" style="padding:28px 20px">
+          <div class="empty-ic">VD</div>No vendors match "${esc(vendorProfileSearchTerm)}".
+        </div>
+      </div>`;
+    return;
+  }
+  el.innerHTML=`<div class="panel" style="margin-bottom:14px">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg)">
+        <label class="fl" style="margin-bottom:6px">Search Vendors</label>
+        ${vendorProfileSearchFieldHTML()}
+      </div>
+    </div>`+filtered.map(v=>`<div class="panel" style="margin-bottom:14px">
       <div class="ph" style="background:var(--blue)">
         <div>
           <span class="ph-title" style="color:#fff;font-size:14px">${v.vendor}</span>
@@ -5463,6 +5624,8 @@ function renderVendorProfiles(){
         </div>
       </div>
       <div style="padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px">
+        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">License Number</div><div style="font-size:12px">${v.licenseNo||'—'}</div></div>
+        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Company Website</div><div style="font-size:12px">${v.website?`<a href="${esc(vendorProfileWebsiteHref(v.website))}" target="_blank" rel="noopener noreferrer">${esc(v.website)}</a>`:'—'}</div></div>
         <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Bank Name</div><div style="font-size:12px">${v.bankName||'—'}</div></div>
         <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Account Type</div><div style="font-size:12px">${v.bankAcctType||'—'}</div></div>
         <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Routing</div><div style="font-size:12px">${v.routingNo||'—'}</div></div>
@@ -5674,7 +5837,6 @@ function generateVendorContract(vid){
     +(v.exclusions?'<div class="section"><div class="section-title">3. Exclusions</div><div class="exclusion-box section-body">'+v.exclusions+'</div></div>':'')
     +'<div class="section"><div class="section-title">'+(v.exclusions?'4':'3')+'. Payment Schedule</div>'+msTable+'</div>'
     +(v.notes?'<div class="section"><div class="section-title">Special Conditions</div><div class="section-body">'+v.notes+'</div></div>':'')
-    +((v.bankAccount||v.zelleId)?'<div class="section" style="background:#F3F8FF;border:1px solid #B0D0F0;border-radius:6px;padding:10px 14px"><div class="section-title" style="border-color:#B0D0F0">Payment Instructions</div><div class="section-body">'+(v.bankName?'Bank: '+v.bankName+' | ':'')+(v.bankAcctType?'Type: '+v.bankAcctType+' | ':'')+(v.bankAccount?'Account: ****'+v.bankAccount.slice(-4)+' | ':'')+(v.routingNo?'Routing: '+v.routingNo.slice(0,3)+'****'+v.routingNo.slice(-2)+' | ':'')+(v.zelleId?'Zelle: '+v.zelleId:'')+'</div></div>':'')
     +'<div class="section"><div class="section-title">General Terms</div>'
       +'<div class="section-body" style="font-size:10px;color:#555">'
       +'1. All work shall comply with applicable codes including CBC 2022, CPC 2022, CEC 2022, CALGreen 2022, and Title 24. '
@@ -5824,10 +5986,12 @@ function printClientInvoice(cid){
   if(!ctx.project||!ctx.invoice){toast('Client invoice not found');return;}
   const p=ctx.project, inv=ctx.invoice, contract=ctx.contract||{};
   const invoiceNo=inv.invoiceNo||'Client Invoice';
+  const companyName='LIVIO BUILDING SYSTEMS';
+  const companyAddress='121, Main St#562, Los Altos, California (CA) 94022';
   const projectAddress=p.address||[p.street,p.city,p.state,p.zip].filter(Boolean).join(', ');
   const billLines=[
-    inv.clientName||contract.clientName||'-',
-    inv.clientEmail||contract.clientEmail||'',
+    inv.clientName||p.clientOwnerName||contract.clientName||'-',
+    inv.clientEmail||p.clientOwnerEmail||contract.clientEmail||'',
     projectAddress||''
   ].filter(Boolean);
   const detailLines=[
@@ -5839,7 +6003,8 @@ function printClientInvoice(cid){
   ].filter(Boolean).map(line=>`<div style="margin-bottom:4px">${line}</div>`).join('');
   const body=`
     <div style="font-family:Arial,sans-serif;color:#222;max-width:900px;margin:0 auto;padding:24px 28px">
-      <div style="font-size:30px;font-weight:700;color:#2E75B6;letter-spacing:.3px">LIVIO BUILDING SYSTEM</div>
+      <div style="font-size:30px;font-weight:700;color:#2E75B6;letter-spacing:.3px">${companyName}</div>
+      <div style="font-size:13px;line-height:1.6;color:#5b6673;margin:6px 0 2px">${esc(companyAddress)}</div>
       <div style="font-size:34px;font-weight:700;margin:10px 0 26px">INVOICE</div>
 
       <table style="width:100%;border-collapse:collapse;border:1px solid #cfcfcf;margin-bottom:22px">
@@ -6049,22 +6214,24 @@ async function emailClientInvoice(cid, options={}){
 }
 
 function renderClientInvoices(){
-  const entries=(DB.projects||[]).flatMap(p=>((p.clientInvoices||[]).map(inv=>({project:p,invoice:inv,linked:(p.clientContracts||[]).find(c=>c.id===inv.contractId)||null}))));
-  const invoices=entries.slice().sort((a,b)=>{
+  const p=proj(); if(!p) return;
+  const invoices=((p.clientInvoices||[]).map(inv=>({project:p,invoice:inv,linked:(p.clientContracts||[]).find(c=>c.id===inv.contractId)||null}))).slice().sort((a,b)=>{
     const ad=(a.invoice.invoiceDate||a.invoice.dueDate||'');
     const bd=(b.invoice.invoiceDate||b.invoice.dueDate||'');
     return String(bd).localeCompare(String(ad)) || String(b.invoice.invoiceNo||'').localeCompare(String(a.invoice.invoiceNo||''));
   });
-  vEl('ct-ci').textContent=invoices.length;
+  vEl('ct-ci').textContent=(p.clientInvoices||[]).length;
   const el=vEl('ci-content'); if(!el) return;
+  if(vEl('ci-ledger')) vEl('ci-ledger').innerHTML=buildClientInvoiceLedgerHTML(p,{emptyMsg:'No client invoices added yet for this project. Click + Add Client Invoice to start this invoice book.'});
   invoices.forEach(({invoice:inv})=>regFiles(inv.files||[]));
   if(!invoices.length){
-    el.innerHTML=`<div class="empty"><div class="empty-ic">INV</div>No client invoices added yet. Click + Add Client Invoice to start.</div>`;
+    el.innerHTML=`<div class="empty"><div class="empty-ic">INV</div>No client invoices added yet for this project. Click + Add Client Invoice to start this invoice book.</div>`;
     return;
   }
   el.innerHTML=invoices.map(({project:p,invoice:inv,linked})=>{
     const files=(inv.files||[]);
-    const status=(inv.status||'Draft');
+    const paymentReceived=!!inv.paymentReceived||String(inv.status||'').toLowerCase()==='paid';
+    const status=(paymentReceived?'Paid':(inv.status||'Draft'));
     const balance=Number(inv.balanceDue||0);
     const amount=Number(inv.amount||0);
     const statusBg=status==='Paid'?'rgba(16,185,129,.12)':status==='Overdue'?'rgba(180,30,30,.12)':'rgba(12,27,46,.08)';
@@ -6085,22 +6252,25 @@ function renderClientInvoices(){
           <span style="background:${statusBg};color:${statusColor};font-size:10px;padding:2px 8px;border-radius:999px;margin-left:8px;border:1px solid rgba(255,255,255,.12)">${status}</span>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${paymentReceived?'':`<button class="btn btn-xs" style="background:rgba(16,185,129,.18);color:#D1FAE5;border:1px solid rgba(167,243,208,.55);font-size:10px" onclick="markClientInvoiceReceived('${inv.id}')">Tick Received</button>`}
           <button class="btn btn-xs" style="background:rgba(45,106,15,.3);color:#9FE1CB;border:1px solid rgba(45,106,15,.5);font-size:10px" onclick="downloadClientInvoicePDF('${inv.id}')">PDF</button>
           <button class="btn btn-xs" style="background:rgba(26,107,196,.28);color:#DDEBFA;border:1px solid rgba(176,208,240,.45);font-size:10px" onclick="emailClientInvoice('${inv.id}')">Email Client</button>
-          <button class="btn btn-xs" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2);font-size:10px" onclick="openModal('cifiles','${inv.id}')">Attach</button>
+          <button class="btn btn-xs" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2);font-size:10px" onclick="openModal('cifiles','${inv.id}')">Attach Files</button>
           <button class="btn btn-xs" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2);font-size:10px" onclick="openModal('clientinvoice','${inv.id}')">Edit</button>
           <button class="btn btn-xs" style="background:rgba(180,30,30,.3);color:#F09595;border:1px solid rgba(180,30,30,.4);font-size:10px" onclick="delClientInvoice('${inv.id}')">Delete</button>
         </div>
       </div>
       <div style="padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px">
         <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Project</div><div style="font-size:12px;font-weight:600">${p.name||'-'}</div></div>
-        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Client</div><div style="font-size:12px;font-weight:600">${inv.clientName||'-'}</div></div>
-        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Client Email</div><div style="font-size:12px">${inv.clientEmail||(linked&&linked.clientEmail)||'-'}</div></div>
+        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Client</div><div style="font-size:12px;font-weight:600">${inv.clientName||p.clientOwnerName||'-'}</div></div>
+        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Client Email</div><div style="font-size:12px">${inv.clientEmail||p.clientOwnerEmail||(linked&&linked.clientEmail)||'-'}</div></div>
         <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Linked Contract</div><div style="font-size:12px">${linked?(linked.contractTitle||linked.contractNo||'Contract'):'-'}</div></div>
         <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Invoice Amount</div><div style="font-size:14px;font-weight:700;font-family:'Barlow Condensed',sans-serif;color:var(--navy)">${amount?'$'+amount.toLocaleString():'-'}</div></div>
         <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Balance Due</div><div style="font-size:14px;font-weight:700;font-family:'Barlow Condensed',sans-serif;color:${balance>0?'#9f1239':'#0f766e'}">${'$'+balance.toLocaleString()}</div></div>
         <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Invoice Date</div><div style="font-size:12px">${inv.invoiceDate?fmtDate(inv.invoiceDate):'-'}</div></div>
         <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Due Date</div><div style="font-size:12px">${inv.dueDate?fmtDate(inv.dueDate):'-'}</div></div>
+        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Payment Received</div><div style="font-size:12px;font-weight:600;color:${paymentReceived?'#0f766e':'var(--text)'}">${paymentReceived?'Yes':'No'}</div></div>
+        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Received Date</div><div style="font-size:12px">${inv.receivedDate?fmtDate(inv.receivedDate):'-'}</div></div>
         ${inv.description?`<div style="grid-column:1/-1"><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Description</div><div style="font-size:11px;color:var(--text)">${inv.description}</div></div>`:''}
         ${inv.notes?`<div style="grid-column:1/-1"><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Notes</div><div style="font-size:11px;color:var(--text)">${inv.notes}</div></div>`:''}
       </div>
@@ -6112,12 +6282,120 @@ function renderClientInvoices(){
   }).join('');
 }
 
+function markClientInvoiceReceived(cid){
+  const ctx=getClientInvoiceContext(cid);
+  if(!ctx.project||!ctx.invoice){toast('Client invoice not found');return;}
+  ctx.invoice.paymentReceived=true;
+  ctx.invoice.receivedDate=ctx.invoice.receivedDate||localDateStr();
+  ctx.invoice.status='Paid';
+  ctx.invoice.balanceDue=0;
+  saveDB();renderAll();toast('Payment marked as received');
+}
+
 function delClientInvoice(cid){
   const ctx=getClientInvoiceContext(cid);
   const p=ctx.project;
   if(!p||!confirm('Delete this client invoice?'))return;
   p.clientInvoices=(p.clientInvoices||[]).filter(x=>x.id!==cid);
   saveDB();renderAll();toast('Deleted');
+}
+
+function exportClientInvoiceLedgerPDF(){
+  const p=proj(); if(!p){toast('⚠ No project selected');return;}
+  const data=getClientInvoiceLedgerData(p);
+  if(!data.entries.length){toast('⚠ No client invoices to export');return;}
+  const rows=data.entries.map(({project,invoice:inv,linked},idx)=>{
+    const amount=Number(inv.amount||0);
+    const balance=Math.max(0, Number(inv.balanceDue||0));
+    const client=inv.clientName||project.clientOwnerName||'Client';
+    const email=inv.clientEmail||project.clientOwnerEmail||(linked&&linked.clientEmail)||'—';
+    const status=inv.status||'Draft';
+    const bg=idx%2===0?'#fff':'#fafaf8';
+    return '<tr style="background:'+bg+'">'
+      +'<td style="padding:6px 8px;font-size:10px;font-weight:700;border-bottom:1px solid #eee">'+(inv.invoiceNo||'Client Invoice')+'<div style="font-size:9px;font-weight:400;color:#777;margin-top:2px">'+client+'</div></td>'
+      +'<td style="padding:6px 8px;font-size:10px;border-bottom:1px solid #eee">'+email+'</td>'
+      +'<td style="padding:6px 8px;font-size:10px;border-bottom:1px solid #eee;white-space:nowrap">'+(inv.invoiceDate||'—')+'</td>'
+      +'<td style="padding:6px 8px;font-size:10px;border-bottom:1px solid #eee;white-space:nowrap">'+(inv.dueDate||'—')+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;font-weight:700;border-bottom:1px solid #eee;white-space:nowrap">$'+amount.toLocaleString()+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;font-weight:700;border-bottom:1px solid #eee;white-space:nowrap;color:'+(balance>0?'#9B1F1F':'#0f766e')+'">$'+balance.toLocaleString()+'</td>'
+      +'<td style="padding:6px 8px;font-size:10px;border-bottom:1px solid #eee">'+status+'</td>'
+      +'</tr>';
+  }).join('');
+
+  const html='<!doctype html><html><head><meta charset="utf-8"><title>Client Invoice Ledger - '+esc(p.name)+'</title>'
+    +'<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;color:#1a1917;padding:22px;font-size:12px}h1{font-size:20px;margin-bottom:4px;color:#0C1B2E}.meta{color:#6b6a64;font-size:10px;margin-bottom:16px;line-height:1.6}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}.card{border:1px solid #ddd7cd;border-top:4px solid #0C1B2E;border-radius:10px;padding:12px;background:#fff}.card .l{font-size:10px;color:#6b6a64;text-transform:uppercase;font-weight:700;letter-spacing:.5px}.card .v{font-size:22px;font-weight:700;margin-top:6px}.card .s{font-size:11px;color:#777;margin-top:4px}table{width:100%;border-collapse:collapse}th{background:#f4efe7;color:#5f6f7f;font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:8px;text-align:left;border-bottom:1px solid #ddd7cd}td{vertical-align:top}@media print{body{padding:14px}@page{margin:12mm}}</style></head><body>'
+    +'<h1>Client Invoice Ledger</h1>'
+    +'<div class="meta">'+esc(p.name)+' &nbsp;&middot;&nbsp; '+esc(p.address||'')+'<br>Generated '+new Date().toLocaleDateString()+'</div>'
+    +'<div class="cards">'
+    +'<div class="card" style="border-top-color:#2A6DBD"><div class="l">Total Invoiced</div><div class="v" style="color:#2A6DBD">'+esc(fmtMoney(data.totalInvoiced))+'</div><div class="s">'+data.entries.length+' invoices</div></div>'
+    +'<div class="card" style="border-top-color:#2D6A0F"><div class="l">Received</div><div class="v" style="color:#2D6A0F">'+esc(fmtMoney(data.totalPaid))+'</div><div class="s">Amount collected</div></div>'
+    +'<div class="card" style="border-top-color:#9B1F1F"><div class="l">Outstanding</div><div class="v" style="color:#9B1F1F">'+esc(fmtMoney(data.totalBalance))+'</div><div class="s">Still due</div></div>'
+    +'<div class="card" style="border-top-color:#A86A00"><div class="l">Overdue</div><div class="v" style="color:#A86A00">'+data.overdueCount+'</div><div class="s">Past due invoices</div></div>'
+    +'</div>'
+    +'<table><thead><tr><th>Invoice</th><th>Client Email</th><th>Invoice Date</th><th>Due Date</th><th>Amount</th><th>Balance</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'</body></html>';
+
+  const win=window.open('','_blank');
+  if(!win){toast('⚠ Pop-up blocked');return;}
+  win.document.write(html); win.document.close();
+  setTimeout(function(){win.focus();win.print();},600);
+  toast('🖨 Client invoice ledger opened - Print to Save as PDF');
+}
+
+function exportClientInvoiceLedgerExcel(){
+  const p=proj(); if(!p){toast('⚠ No project selected');return;}
+  const data=getClientInvoiceLedgerData(p);
+  if(!data.entries.length){toast('⚠ No client invoices to export');return;}
+  toast('📊 Building Excel…',3000);
+  if(window.XLSX){_doClientInvoiceLedgerExcel(p);}
+  else{
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onload=()=>_doClientInvoiceLedgerExcel(p);
+    s.onerror=()=>toast('⚠ Could not load Excel library');
+    document.head.appendChild(s);
+  }
+}
+
+function _doClientInvoiceLedgerExcel(p){
+  try{
+    const data=getClientInvoiceLedgerData(p);
+    const XLSX=window.XLSX;
+    const wb=XLSX.utils.book_new();
+    const rows=[
+      ['CLIENT INVOICE LEDGER — '+p.name],
+      ['Project:',p.name,'','Address:',p.address||''],
+      ['Generated:',new Date().toLocaleDateString(),'','Invoices:',data.entries.length],
+      ['Total Invoiced:',Number(data.totalInvoiced||0),'','Received:',Number(data.totalPaid||0)],
+      ['Outstanding:',Number(data.totalBalance||0),'','Overdue:',data.overdueCount],
+      [],
+      ['Invoice','Client','Client Email','Invoice Date','Due Date','Amount','Balance','Status','Payment Received','Received Date','Description']
+    ];
+    data.entries.forEach(({project,invoice:inv,linked})=>{
+      rows.push([
+        inv.invoiceNo||'',
+        inv.clientName||project.clientOwnerName||'',
+        inv.clientEmail||project.clientOwnerEmail||(linked&&linked.clientEmail)||'',
+        inv.invoiceDate||'',
+        inv.dueDate||'',
+        Number(inv.amount||0),
+        Number(inv.balanceDue||0),
+        inv.status||'Draft',
+        inv.paymentReceived||String(inv.status||'').toLowerCase()==='paid'?'Yes':'No',
+        inv.receivedDate||'',
+        inv.description||''
+      ]);
+    });
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:16},{wch:22},{wch:28},{wch:14},{wch:14},{wch:12},{wch:12},{wch:12},{wch:16},{wch:14},{wch:36}];
+    XLSX.utils.book_append_sheet(wb, ws, 'Client Invoice Ledger');
+    const fname=(p.name.replace(/[^a-zA-Z0-9_\-]/g,'_')||'Project')+'_ClientInvoiceLedger.xlsx';
+    XLSX.writeFile(wb, fname);
+    toast('📊 Client invoice ledger Excel downloaded');
+  }catch(e){
+    console.error(e);
+    toast('⚠ Excel error: '+e.message);
+  }
 }
 
 function renderChecklist(){
@@ -6456,7 +6734,9 @@ function getUserPages(user){
   if(!userPerms) return ALL_PAGES.map(p=>p.id); // default: show all pages, no restrictions until admin sets them
   // Support both old array format and new object format
   if(Array.isArray(userPerms)){
-    return userPerms.length ? userPerms : ALL_PAGES.map(p=>p.id);
+    const visible=new Set(userPerms.length ? userPerms : ALL_PAGES.map(p=>p.id));
+    visible.add('vendorprofiles');
+    return ALL_PAGES.map(p=>p.id).filter(id=>visible.has(id));
   }
   // New format: object {pageId:'full'|'view'|'none'}
   return ALL_PAGES
@@ -6472,7 +6752,7 @@ function getPageAccess(user, pageId){
   const perms=getPerms();
   const userPerms=perms[user.id];
   if(!userPerms) return 'full'; // no perms set = full access by default
-  if(Array.isArray(userPerms)) return userPerms.includes(pageId)?'full':'none';
+  if(Array.isArray(userPerms)) return pageId==='vendorprofiles'||userPerms.includes(pageId)?'full':'none';
   // New object format
   const lvl=userPerms[pageId];
   if(!lvl) return 'full'; // page not in perms = full access
