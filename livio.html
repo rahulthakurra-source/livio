@@ -594,7 +594,7 @@ tr:hover .row-actions{opacity:1}
         </div>
       </div>
       <div id="pay-export-bar" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px 16px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-        <span style="font-size:12px;font-weight:600;color:var(--muted)">Export per subcontractor:</span>
+        <span style="font-size:12px;font-weight:600;color:var(--muted)">Export per vendor:</span>
         <div id="sub-export-btns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
       </div>
       <!-- Ledger summary panel -->
@@ -625,8 +625,8 @@ tr:hover .row-actions{opacity:1}
       <div class="panel" id="pay-ledger-panel" style="display:none;margin-bottom:18px">
         <div class="ph" style="background:var(--navy)">
           <div>
-            <span class="ph-title" style="color:#fff">📒 Payment Ledger — All Subcontractors</span>
-            <span style="font-size:10px;color:#8AAAC8">Contract · Paid · Balance per subcontractor</span>
+            <span class="ph-title" style="color:#fff">📒 Vendor Payment Ledger</span>
+            <span style="font-size:10px;color:#8AAAC8">Contract · Paid · Balance by vendor</span>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-xs" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2);font-size:10px" onclick="exportPaymentLedgerPDF()">🖨 PDF</button>
@@ -2798,7 +2798,7 @@ function _buildPayLedgerHTML(quotes, grandContract, grandPaid, p){
     <table style="width:100%;border-collapse:collapse">
       <thead>
         <tr style="background:var(--bg)">
-          <th style="padding:9px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border);width:26%">Subcontractor / Invoice</th>
+          <th style="padding:9px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border);width:26%">Vendor / Invoice</th>
           <th style="padding:9px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">CSI</th>
           <th style="padding:9px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Contract / Amount</th>
           <th style="padding:9px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--green);text-align:left;border-bottom:1px solid var(--border)">✓ Paid</th>
@@ -2810,7 +2810,7 @@ function _buildPayLedgerHTML(quotes, grandContract, grandPaid, p){
       <tbody>
         ${rows}
         <tr style="background:var(--navy)">
-          <td style="padding:11px 14px" colspan="2"><span style="font-size:12px;font-weight:700;color:#fff;letter-spacing:.3px">TOTAL — ${quotes.length} Subcontractor${quotes.length>1?'s':''}</span></td>
+          <td style="padding:11px 14px" colspan="2"><span style="font-size:12px;font-weight:700;color:#fff;letter-spacing:.3px">TOTAL — ${quotes.length} Vendor${quotes.length>1?'s':''}</span></td>
           <td style="padding:11px 14px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;color:#fff">$${grandContract.toLocaleString()}</span></td>
           <td style="padding:11px 14px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;color:#9FE1CB">$${grandPaid.toLocaleString()}</span></td>
           <td style="padding:11px 14px"><span style="font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;color:${grandBal>0?'#F09595':'#9FE1CB'}">$${grandBal.toLocaleString()}</span></td>
@@ -4736,7 +4736,7 @@ function exportPaymentLedgerPDF(qidFilter){
   const html='<!DOCTYPE html><html><head><meta charset="UTF-8"/>'
     +'<title>Payment Ledger &mdash; '+p.name+'</title>'
     +'<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;color:#1a1917;padding:22px;font-size:12px}h1{font-size:19px;margin-bottom:3px;color:#0C1B2E}.meta{color:#6b6a64;font-size:10px;margin-bottom:16px;line-height:1.7}@media print{body{padding:14px}@page{margin:12mm}}</style></head><body>'
-    +'<h1>'+(qidFilter?quotes[0].vendor+' &mdash; Payment Statement':'Payment Ledger &mdash; All Subcontractors')+'</h1>'
+    +'<h1>'+(qidFilter?quotes[0].vendor+' &mdash; Payment Statement':'Vendor Payment Ledger')+'</h1>'
     +'<div class="meta">'+p.name+' &nbsp;&middot;&nbsp; '+(p.address||'')+'<br>Permit: '+(p.permit||'&mdash;')+' &nbsp;&middot;&nbsp; Livio Building Systems &nbsp;&middot;&nbsp; '+new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})+'</div>'
     +subsHTML
     +'<div style="margin-top:20px;font-size:9px;color:#9b9a96;text-align:center;border-top:1px solid #e0ddd5;padding-top:8px">Livio Building Systems &nbsp;&middot;&nbsp; '+p.name+' &nbsp;&middot;&nbsp; Generated '+new Date().toLocaleDateString()+'</div>'
