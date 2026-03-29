@@ -17,7 +17,12 @@ import {
   downloadAttachment,
 } from "./attachmentStore.js";
 import { config } from "./config.js";
-import { isEmailConfigured, sendClientInvoiceEmail, sendEmail } from "./emailClient.js";
+import {
+  getEmailStatus,
+  isEmailConfigured,
+  sendClientInvoiceEmail,
+  sendEmail,
+} from "./emailClient.js";
 import {
   createEmptyProject,
   createProject,
@@ -119,7 +124,15 @@ app.use(
 app.use(express.json({ limit: "25mb" }));
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, service: "livio-backend" });
+  res.json({
+    ok: true,
+    service: "livio-backend",
+    email: getEmailStatus(),
+  });
+});
+
+app.get("/api/email/status", (_req, res) => {
+  res.json({ email: getEmailStatus() });
 });
 
 app.post("/api/auth/login", async (req, res, next) => {
@@ -497,4 +510,12 @@ app.use((error, _req, res, _next) => {
 
 app.listen(config.port, () => {
   console.log(`Livio backend listening on http://localhost:${config.port}`);
+  const emailStatus = getEmailStatus();
+  if (emailStatus.configured) {
+    console.log("SMTP is configured and ready for outbound email.");
+  } else {
+    console.warn(
+      `SMTP is not fully configured. ${emailStatus.issues.join(" ") || "Email sending is disabled."}`,
+    );
+  }
 });

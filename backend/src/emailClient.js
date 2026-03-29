@@ -1,14 +1,35 @@
 import nodemailer from "nodemailer";
 import { config } from "./config.js";
 
+function hasSmtpAuth() {
+  return Boolean(config.smtpUser && config.smtpPass);
+}
+
 export function isEmailConfigured() {
-  return Boolean(
-    config.smtpHost &&
-    config.smtpPort &&
-    config.smtpUser &&
-    config.smtpPass &&
-    config.smtpFrom,
-  );
+  const hasConnection = Boolean(config.smtpHost && config.smtpPort && config.smtpFrom);
+  const hasPartialAuth = Boolean(config.smtpUser || config.smtpPass);
+  return hasConnection && (!hasPartialAuth || hasSmtpAuth());
+}
+
+export function getEmailStatus() {
+  const hasConnection = Boolean(config.smtpHost && config.smtpPort && config.smtpFrom);
+  const hasPartialAuth = Boolean(config.smtpUser || config.smtpPass);
+
+  return {
+    configured: isEmailConfigured(),
+    hostConfigured: Boolean(config.smtpHost),
+    port: config.smtpPort,
+    secure: config.smtpSecure,
+    fromConfigured: Boolean(config.smtpFrom),
+    replyToConfigured: Boolean(config.smtpReplyTo),
+    authConfigured: hasSmtpAuth(),
+    requiresTls: config.smtpRequireTls,
+    ignoresTls: config.smtpIgnoreTls,
+    issues: [
+      !hasConnection ? "Missing SMTP host, port, or from address." : null,
+      hasPartialAuth && !hasSmtpAuth() ? "SMTP username and password must both be set." : null,
+    ].filter(Boolean),
+  };
 }
 
 function createTransporter() {
@@ -20,10 +41,14 @@ function createTransporter() {
     host: config.smtpHost,
     port: config.smtpPort,
     secure: config.smtpSecure,
-    auth: {
-      user: config.smtpUser,
-      pass: config.smtpPass,
-    },
+    requireTLS: config.smtpRequireTls,
+    ignoreTLS: config.smtpIgnoreTls,
+    auth: hasSmtpAuth()
+      ? {
+          user: config.smtpUser,
+          pass: config.smtpPass,
+        }
+      : undefined,
   });
 }
 
@@ -61,6 +86,7 @@ export async function sendEmail({
 
   await transporter.sendMail({
     from: config.smtpFrom,
+    replyTo: config.smtpReplyTo || undefined,
     to,
     subject,
     text,

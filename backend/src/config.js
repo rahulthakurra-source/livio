@@ -9,6 +9,13 @@ const DEFAULT_FRONTEND_ORIGINS = [
   "null",
 ];
 
+function parseBoolean(value, fallback = false) {
+  if (value == null || value === "") {
+    return fallback;
+  }
+  return String(value).toLowerCase() === "true";
+}
+
 function requireEnv(name) {
   const value = process.env[name];
   if (!value) {
@@ -34,9 +41,12 @@ export const config = {
   supabaseServiceRoleKey: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
   smtpHost: process.env.SMTP_HOST || "",
   smtpPort: Number(process.env.SMTP_PORT || 587),
-  smtpSecure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
+  smtpSecure: parseBoolean(process.env.SMTP_SECURE),
   smtpUser: process.env.SMTP_USER || "",
   smtpPass: process.env.SMTP_PASS || "",
   smtpFrom: process.env.SMTP_FROM || "",
+  smtpReplyTo: process.env.SMTP_REPLY_TO || "",
+  smtpRequireTls: parseBoolean(process.env.SMTP_REQUIRE_TLS),
+  smtpIgnoreTls: parseBoolean(process.env.SMTP_IGNORE_TLS),
   attachmentBucket: process.env.ATTACHMENT_BUCKET || "project-files",
 };
