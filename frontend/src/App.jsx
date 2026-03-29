@@ -1,4 +1,6 @@
 export default function App() {
+  const legacyVersion = "2026-03-29-vendor-directory";
+
   return (
     <div className="legacy-shell">
       <div className="legacy-bar">
@@ -8,7 +10,7 @@ export default function App() {
       <iframe
         className="legacy-frame"
         title="Livio Legacy AI"
-        src="/legacy/livio.html"
+        src={`/legacy/livio.html?v=${legacyVersion}`}
       />
     </div>
   );
