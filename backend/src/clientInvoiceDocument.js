@@ -108,13 +108,15 @@ export async function buildClientInvoicePdf({ project = {}, invoice = {}, contra
   const muted = rgb(0.43, 0.43, 0.43);
   const text = rgb(0.14, 0.14, 0.14);
   const shade = rgb(0.95, 0.95, 0.95);
+  const companyName = "LIVIO BUILDING SYSTEMS";
+  const companyAddress = "121, Main St#562, Los Altos, California (CA) 94022";
 
   const projectName = clean(project.name) || "Project";
   const projectAddress = clean(
     project.address || [project.street, project.city, project.state, project.zip].filter(Boolean).join(", "),
   );
-  const clientName = clean(invoice.clientName || contract.clientName) || "Client";
-  const clientEmail = clean(invoice.clientEmail || contract.clientEmail);
+  const clientName = clean(invoice.clientName || project.clientOwnerName || contract.clientName) || "Client";
+  const clientEmail = clean(invoice.clientEmail || project.clientOwnerEmail || contract.clientEmail);
   const contractTitle = clean(contract.contractTitle || contract.contractNo);
   const invoiceNumber = clean(invoice.invoiceNo) || "-";
   const invoiceDate = dateText(invoice.invoiceDate);
@@ -125,16 +127,25 @@ export async function buildClientInvoicePdf({ project = {}, invoice = {}, contra
   const description = clean(invoice.description) || "No description provided.";
   const notes = clean(invoice.notes);
 
-  page.drawText("LIVIO BUILDING SYSTEM", {
+  page.drawText(companyName, {
     x: 48,
     y: 748,
     size: 16,
     font: bold,
     color: blue,
   });
+  drawWrapped(page, companyAddress, {
+    x: 48,
+    y: 730,
+    width: 260,
+    font,
+    size: 10,
+    lineHeight: 12,
+    color: muted,
+  });
   page.drawText("INVOICE", {
     x: 48,
-    y: 716,
+    y: 700,
     size: 20,
     font: bold,
     color: text,
@@ -335,7 +346,7 @@ export async function buildClientInvoicePdf({ project = {}, invoice = {}, contra
 
 export function buildClientInvoiceEmail({ project = {}, invoice = {}, contract = {} }) {
   const projectName = clean(project.name) || "Project";
-  const clientName = clean(invoice.clientName || contract.clientName) || "Client";
+  const clientName = clean(invoice.clientName || project.clientOwnerName || contract.clientName) || "Client";
   const invoiceNo = clean(invoice.invoiceNo) || "Invoice";
   const amount = money(invoice.amount);
   const balance = money(invoice.balanceDue);
