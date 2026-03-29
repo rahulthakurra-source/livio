@@ -2650,15 +2650,38 @@ function renderInspections(){
 function getApprovedPaymentInvoices(p){
   return (p.invoices||[]).filter(i=>i.approvalStatus==='approved');
 }
-function getPaymentSources(p){
-  const approvedInvoices=getApprovedPaymentInvoices(p);
+function getPaymentSourceKey(source){
+  return `${source.sourceType}:${source.id}`;
+}
+function getInvoiceVendorKey(inv, project=proj()){
+  const profileId=inv&&inv.vendorProfileId?inv.vendorProfileId:findVendorProfileIdByName(inv&&inv.vendor, project);
+  if(profileId) return 'vp_'+profileId;
+  const nameKey=lookupKey(inv&&inv.vendor);
+  return nameKey?'name_'+nameKey:'';
+}
+function getPaymentSourceVendorKey(source, project=proj()){
+  const profileId=source&&source.vendorProfileId?source.vendorProfileId:findVendorProfileIdByName(source&&source.vendor, project);
+  if(profileId) return 'vp_'+profileId;
+  const nameKey=lookupKey(source&&source.vendor);
+  return nameKey?'name_'+nameKey:'';
+}
+function addPaymentSource(sources, seen, source){
+  const key=getPaymentSourceKey(source);
+  if(seen.has(key)) return null;
+  source.sourceKey=key;
+  sources.push(source);
+  seen.add(key);
+  return source;
+}
+function buildDirectPaymentSources(p, approvedInvoices=getApprovedPaymentInvoices(p)){
   const sources=[];
+  const seen=new Set();
   (p.quotes||[]).forEach(q=>{
     if(q.status==='approved'||approvedInvoices.some(inv=>inv.quoteId===q.id)){
-      sources.push({
+      addPaymentSource(sources, seen, {
         sourceType:'quote',
         id:q.id,
-        sourceKey:q.id,
+        vendorProfileId:q.vendorProfileId||findVendorProfileIdByName(q.vendor, p),
         vendor:q.vendor||'Vendor',
         scope:q.scope||'',
         csi:q.csi||'',
@@ -2670,10 +2693,10 @@ function getPaymentSources(p){
   });
   (p.vendors||[]).forEach(v=>{
     if(!v.quoteId&&approvedInvoices.some(inv=>inv.vcId===v.id)){
-      sources.push({
+      addPaymentSource(sources, seen, {
         sourceType:'vendor',
         id:v.id,
-        sourceKey:'vc_'+v.id,
+        vendorProfileId:v.vendorProfileId||findVendorProfileIdByName(v.vendor, p),
         vendor:v.vendor||'Vendor',
         scope:v.scope||'Vendor Contract',
         csi:v.csi||'',
@@ -2685,11 +2708,62 @@ function getPaymentSources(p){
   });
   return sources;
 }
+function resolveApprovedInvoicePaymentSourceKey(p, inv, directSources=buildDirectPaymentSources(p)){
+  if(inv.vcId){
+    const vendorKey='vendor:'+inv.vcId;
+    if(directSources.some(source=>getPaymentSourceKey(source)===vendorKey)) return vendorKey;
+  }
+  if(inv.quoteId){
+    const quoteKey='quote:'+inv.quoteId;
+    if(directSources.some(source=>getPaymentSourceKey(source)===quoteKey)) return quoteKey;
+  }
+  const vendorKey=getInvoiceVendorKey(inv, p);
+  if(vendorKey){
+    const vendorMatches=directSources.filter(source=>getPaymentSourceVendorKey(source, p)===vendorKey);
+    if(vendorMatches.length===1) return getPaymentSourceKey(vendorMatches[0]);
+    return 'invoice:'+vendorKey;
+  }
+  return 'invoice:'+inv.id;
+}
+function getPaymentSources(p){
+  const approvedInvoices=getApprovedPaymentInvoices(p);
+  const directSources=buildDirectPaymentSources(p, approvedInvoices);
+  const sources=[...directSources];
+  const sourceMap=new Map(sources.map(source=>[getPaymentSourceKey(source), source]));
+  approvedInvoices.forEach(inv=>{
+    const sourceKey=resolveApprovedInvoicePaymentSourceKey(p, inv, directSources);
+    if(sourceMap.has(sourceKey)){
+      const existing=sourceMap.get(sourceKey);
+      if(existing.sourceType==='invoice'){
+        existing.amount+=Number(inv.amount||0);
+        if(!existing.date&&inv.invoiceDate) existing.date=inv.invoiceDate;
+      }
+      return;
+    }
+    const vendorProfileId=inv.vendorProfileId||findVendorProfileIdByName(inv.vendor, p);
+    const vendorProfile=getVendorProfileById(vendorProfileId, p);
+    const source={
+      sourceType:'invoice',
+      id:sourceKey.replace(/^invoice:/,''),
+      vendorProfileId:vendorProfileId||'',
+      vendor:inv.vendor||(vendorProfile&&vendorProfile.vendor)||'Vendor',
+      scope:inv.manualScope||'Approved invoices',
+      csi:'',
+      amount:Number(inv.amount||0),
+      date:inv.invoiceDate||'',
+      files:[...(inv.files||[])],
+    };
+    source.sourceKey=getPaymentSourceKey(source);
+    sources.push(source);
+    sourceMap.set(sourceKey, source);
+  });
+  return sources;
+}
 function getPaymentSourceInvoices(p, source){
+  const directSources=buildDirectPaymentSources(p);
+  const sourceKey=getPaymentSourceKey(source);
   return getApprovedPaymentInvoices(p).filter(inv=>
-    source.sourceType==='vendor'
-      ?inv.vcId===source.id
-      :inv.quoteId===source.id
+    resolveApprovedInvoicePaymentSourceKey(p, inv, directSources)===sourceKey
   );
 }
 function getPaymentSourceMilestones(p, source){
@@ -2702,16 +2776,36 @@ function getPaymentSourceContractAmount(source, invoices){
   const booked=(invoices||[]).reduce((sum,inv)=>sum+Number(inv.amount||0),0);
   return Math.max(Number(source.amount||0), booked);
 }
+function getInvoicePaymentEntries(inv){
+  const entries=[...(inv.partialPayments||[])].map(pp=>({...pp,full:false}));
+  const invoiceAmount=Number(inv.amount||0);
+  const partialTotal=entries.reduce((sum,pp)=>sum+Number(pp.amount||0),0);
+  const remaining=invoiceAmount-partialTotal;
+  if(inv.paid&&(remaining>0.009||!entries.length)){
+    entries.push({
+      id:'final_'+(inv.id||''),
+      amount:remaining>0.009?remaining:invoiceAmount,
+      date:inv.paidDate||'',
+      txnNo:inv.txnNo||'',
+      files:[],
+      full:true
+    });
+  }
+  return entries.filter(pp=>Number(pp.amount||0)||pp.date||pp.txnNo||((pp.files||[]).length));
+}
+function getInvoicePaidAmount(inv){
+  return getInvoicePaymentEntries(inv).reduce((sum,pp)=>sum+Number(pp.amount||0),0);
+}
+function getInvoiceBalanceAmount(inv){
+  return Number(inv.amount||0)-getInvoicePaidAmount(inv);
+}
 function _buildPayLedgerHTML(quotes, grandContract, grandPaid, p){
   const grandBal = grandContract - grandPaid;
   const totalPct = grandContract ? Math.min(100, Math.round(grandPaid/grandContract*100)) : 0;
 
   const rows = quotes.map((q,idx)=>{
     const invAll=getPaymentSourceInvoices(p, q);
-    const invPaidLedger = invAll.reduce((a,i)=>{
-      if(i.paid) return a+Number(i.amount||0);
-      return a+(i.partialPayments||[]).reduce((b,pp)=>b+Number(pp.amount||0),0);
-    },0);
+    const invPaidLedger = invAll.reduce((a,i)=>a+getInvoicePaidAmount(i),0);
     const qContract = getPaymentSourceContractAmount(q, invAll);
     const qPaid = invPaidLedger;
     const qBal = qContract - qPaid;
@@ -2724,13 +2818,12 @@ function _buildPayLedgerHTML(quotes, grandContract, grandPaid, p){
     // Group invoices by milestone
     const invSubRows=invAll.map(inv=>{
       const msName=vMilestones.find(m=>m.id===inv.milestoneId)?.name||'—';
-      const invPaid=inv.paid?Number(inv.amount||0):(inv.partialPayments||[]).reduce((a,pp)=>a+Number(pp.amount||0),0);
-      const invBal=Number(inv.amount||0)-invPaid;
-      const allPmts=[...(inv.partialPayments||[])];
-      if(inv.paid&&!allPmts.length) allPmts.push({amount:inv.amount,date:inv.paidDate,full:true});
+      const invPaid=getInvoicePaidAmount(inv);
+      const invBal=getInvoiceBalanceAmount(inv);
+      const allPmts=getInvoicePaymentEntries(inv);
       const pmtDetail=allPmts.map(pp=>
         '<span style="font-size:9px;color:var(--green);background:var(--green-l);padding:2px 7px;border-radius:3px;margin-right:3px;margin-bottom:2px;display:inline-block">'
-        +'&#10003; $'+Number(pp.amount||0).toLocaleString()
+        +'&#10003; '+(pp.full?'Final':'Part')+' $'+Number(pp.amount||0).toLocaleString()
         +(pp.date?' &middot; '+fmtDate(pp.date):'')
         +(pp.txnNo?'<span style="color:#1A6BC4"> &middot; Txn: '+pp.txnNo+'</span>':'')
         +(pp.full&&inv.txnNo?'<span style="color:#1A6BC4"> &middot; Txn: '+inv.txnNo+'</span>':'')
@@ -2852,10 +2945,7 @@ function renderPayments(){
   sources.forEach(q=>{
     const qInvoices=getPaymentSourceInvoices(p, q);
     totalContract+=getPaymentSourceContractAmount(q, qInvoices);
-    qInvoices.forEach(i=>{
-      if(i.paid){totalPaid+=Number(i.amount||0);}
-      else{(i.partialPayments||[]).forEach(pp=>totalPaid+=Number(pp.amount||0));}
-    });
+    qInvoices.forEach(i=>{totalPaid+=getInvoicePaidAmount(i);});
   });
   const pct=totalContract?Math.min(100,Math.round(totalPaid/totalContract*100)):0;
   vEl('bs-c').textContent=fmtMoney(totalContract);
@@ -2894,10 +2984,7 @@ function renderPayments(){
   listEl.innerHTML=sources.map(q=>{
     const qInvoices=getPaymentSourceInvoices(p, q);
     // qPaid = fully paid invoices + all partial payments on unpaid invoices
-    const qPaid=qInvoices.reduce((a,i)=>{
-      if(i.paid) return a+Number(i.amount||0);
-      return a+(i.partialPayments||[]).reduce((b,pp)=>b+Number(pp.amount||0),0);
-    },0);
+    const qPaid=qInvoices.reduce((a,i)=>a+getInvoicePaidAmount(i),0);
     const qTotal=getPaymentSourceContractAmount(q, qInvoices);
     const qBal=qTotal-qPaid;
     const qPct=qTotal?Math.min(100,Math.round(qPaid/qTotal*100)):0;
@@ -2906,8 +2993,8 @@ function renderPayments(){
       const bg=idx%2===0?'#fff':'var(--bg)';
       // Partial payments
       const partials=inv.partialPayments||[];
-      const totalPartial=partials.reduce((a,pp)=>a+Number(pp.amount||0),0);
-      const remaining=Number(inv.amount||0)-totalPartial;
+      const totalPaid=getInvoicePaidAmount(inv);
+      const remaining=getInvoiceBalanceAmount(inv);
       const vc2=(p.vendors||[]).find(v=>(inv.vcId&&v.id===inv.vcId)||(inv.quoteId&&v.quoteId===inv.quoteId));
       const invMsName=vc2?(vc2.milestones||[]).find(m=>m.id===inv.milestoneId)?.name||'':'' ;
       const lastTxn=partials.length
@@ -2958,6 +3045,7 @@ function renderPayments(){
           </div>`
         :`<div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 9px">
             ${payHistoryHTML}
+            ${totalPaid>0?`<div style="font-size:10px;font-weight:700;color:var(--green);margin-bottom:5px">Paid so far: $${totalPaid.toLocaleString()}</div>`:''}
             ${remaining<Number(inv.amount||0)?`<div style="font-size:10px;font-weight:700;color:var(--red);margin-bottom:5px;padding-bottom:4px;border-bottom:1px solid var(--border)">Remaining: $${remaining.toLocaleString()}</div>`:''}
             <div style="display:flex;gap:4px;margin-bottom:4px">
               <input type="number" id="invpamt_${inv.id}" style="flex:1;font-size:10px;border:1px solid var(--border);border-radius:4px;padding:3px 6px;background:#fff;outline:none" placeholder="Amount ($)"/>
@@ -5424,7 +5512,14 @@ function markInvPaid(iid){
   const p=proj();if(!p)return;
   const inv=(p.invoices||[]).find(x=>x.id===iid);if(!inv)return;
   const dateEl=vEl('invd_'+iid);
-  inv.paid=true; inv.paidDate=dateEl?.value||localDateStr();
+  const paidDate=dateEl?.value||localDateStr();
+  inv.partialPayments=inv.partialPayments||[];
+  const alreadyPaid=inv.partialPayments.reduce((a,pp)=>a+Number(pp.amount||0),0);
+  const remaining=Math.max(0, Number(inv.amount||0)-alreadyPaid);
+  if(remaining>0.009){
+    inv.partialPayments.push({id:uid(),amount:remaining,date:paidDate,txnNo:inv.txnNo||'',note:'',full:true});
+  }
+  inv.paid=true; inv.paidDate=paidDate;
   saveDB();renderAll();toast('✓ Invoice marked as paid');
 }
 function addPartialPayment(iid){
@@ -5460,6 +5555,7 @@ function removePartialPayment(iid,ppid){
 function unmarkInv(iid){
   const p=proj();if(!p)return;
   const inv=(p.invoices||[]).find(x=>x.id===iid);if(!inv)return;
+  inv.partialPayments=(inv.partialPayments||[]).filter(pp=>!pp.full);
   inv.paid=false;inv.paidDate='';
   saveDB();renderAll();toast('Invoice unmarked');
 }
