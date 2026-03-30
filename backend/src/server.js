@@ -105,6 +105,19 @@ function buildPasswordResetEmail({ username, code }) {
   return { subject, text, html };
 }
 
+function getEmailNotConfiguredResponse() {
+  const emailStatus = getEmailStatus();
+  const details = emailStatus.issues.length
+    ? emailStatus.issues
+    : ["Add RESEND_API_KEY and RESEND_FROM, or configure SMTP on the backend."];
+
+  return {
+    error: `Email is not configured on the backend. ${details.join(" ")}`,
+    details,
+    email: emailStatus,
+  };
+}
+
 function isAllowedOrigin(origin) {
   return true;
 }
@@ -227,9 +240,7 @@ app.post("/api/client-invoices/pdf", async (req, res, next) => {
 app.post("/api/client-invoices/email", async (req, res, next) => {
   try {
     if (!isEmailConfigured()) {
-      return res.status(400).json({
-        error: "SMTP is not configured on the backend. Add SMTP settings on Render first.",
-      });
+      return res.status(400).json(getEmailNotConfiguredResponse());
     }
 
     const payload = getClientInvoicePayload(req.body);
@@ -260,9 +271,7 @@ app.post("/api/client-invoices/email", async (req, res, next) => {
 app.post("/api/vendor-contracts/email", async (req, res, next) => {
   try {
     if (!isEmailConfigured()) {
-      return res.status(400).json({
-        error: "SMTP is not configured on the backend. Add SMTP settings on Render first.",
-      });
+      return res.status(400).json(getEmailNotConfiguredResponse());
     }
 
     const payload = getVendorContractPayload(req.body);
@@ -298,9 +307,7 @@ app.post("/api/vendor-contracts/email", async (req, res, next) => {
 app.post("/api/auth/forgot-password", async (req, res, next) => {
   try {
     if (!isEmailConfigured()) {
-      return res.status(400).json({
-        error: "SMTP is not configured on the backend. Add SMTP settings on Render first.",
-      });
+      return res.status(400).json(getEmailNotConfiguredResponse());
     }
 
     const username = String(req.body?.username || "").trim();
@@ -512,10 +519,10 @@ app.listen(config.port, () => {
   console.log(`Livio backend listening on http://localhost:${config.port}`);
   const emailStatus = getEmailStatus();
   if (emailStatus.configured) {
-    console.log("SMTP is configured and ready for outbound email.");
+    console.log(`Email is configured and ready for outbound delivery via ${emailStatus.provider}.`);
   } else {
     console.warn(
-      `SMTP is not fully configured. ${emailStatus.issues.join(" ") || "Email sending is disabled."}`,
+      `Email is not fully configured. ${emailStatus.issues.join(" ") || "Email sending is disabled."}`,
     );
   }
 });
