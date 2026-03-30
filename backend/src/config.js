@@ -16,6 +16,15 @@ function parseBoolean(value, fallback = false) {
   return String(value).toLowerCase() === "true";
 }
 
+function parseNumber(value, fallback) {
+  if (value == null || value === "") {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function requireEnv(name) {
   const value = process.env[name];
   if (!value) {
@@ -42,6 +51,12 @@ export const config = {
   resendApiKey: process.env.RESEND_API_KEY || "",
   resendFrom: process.env.RESEND_FROM || "",
   resendReplyTo: process.env.RESEND_REPLY_TO || "",
+  gcsProjectId: process.env.GCS_PROJECT_ID || "",
+  gcsBucket: process.env.GCS_BUCKET || "",
+  gcsClientEmail: process.env.GCS_CLIENT_EMAIL || "",
+  gcsPrivateKey: (process.env.GCS_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
+  gcsBucketLocation: process.env.GCS_BUCKET_LOCATION || "US",
+  gcsSignedUrlTtlSeconds: parseNumber(process.env.GCS_SIGNED_URL_TTL_SECONDS, 900),
   smtpHost: process.env.SMTP_HOST || "",
   smtpPort: Number(process.env.SMTP_PORT || 587),
   smtpSecure: parseBoolean(process.env.SMTP_SECURE),

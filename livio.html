@@ -1290,6 +1290,7 @@ function clientInvoiceReceivedToggle(sync=true){
   const statusEl=vEl('f-ci-status');
   const balEl=vEl('f-ci-bal');
   const amtEl=vEl('f-ci-amt');
+  const partialPaid=parseFloat(balEl?.dataset.partialPaid||'0')||0;
   if(!chk||!dateEl) return;
   dateEl.disabled=!chk.checked;
   dateEl.style.opacity=chk.checked?'1':'.65';
@@ -1298,8 +1299,16 @@ function clientInvoiceReceivedToggle(sync=true){
     if(statusEl) statusEl.value='Paid';
     if(balEl) balEl.value='0';
   }else if(sync){
-    if(statusEl&&statusEl.value==='Paid') statusEl.value='Draft';
-    if(balEl&&!balEl.value&&(amtEl?.value||'')) balEl.value=amtEl.value;
+    if(partialPaid>0){
+      if(statusEl&&statusEl.value==='Paid') statusEl.value='Partial';
+      if(balEl){
+        const amt=parseFloat(amtEl?.value)||0;
+        balEl.value=String(Math.max(0, amt-partialPaid));
+      }
+    }else{
+      if(statusEl&&statusEl.value==='Paid') statusEl.value='Draft';
+      if(balEl&&!balEl.value&&(amtEl?.value||'')) balEl.value=amtEl.value;
+    }
   }
 }
 const toast = (msg,d=2600) => { const t=vEl('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),d); };
@@ -1769,6 +1778,53 @@ async function uploadAttachmentFile(file){
   if(!client) throw new Error('Missing backend URL.');
   const projectId=proj()?.id||DB.activeId||'';
   if(!projectId) throw new Error('Select a project before uploading files.');
+  const contentType=file.type||'application/octet-stream';
+  try{
+    const initRes=await fetch(client.baseUrl+'/attachments/upload-url',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify({
+        projectId,
+        fileName:file.name,
+        contentType,
+        size:file.size
+      })
+    });
+    const initText=await initRes.text();
+    let initData=null;
+    if(initText){
+      try{ initData=JSON.parse(initText); }
+      catch(_e){ initData=initText; }
+    }
+    if(initRes.ok && initData && initData.upload && initData.upload.url){
+      const uploadRes=await fetch(initData.upload.url,{
+        method:initData.upload.method||'PUT',
+        headers:initData.upload.headers||{},
+        body:file
+      });
+      if(!uploadRes.ok){
+        const uploadText=await uploadRes.text();
+        throw new Error(uploadText||('Upload failed ('+uploadRes.status+')'));
+      }
+      return initData.attachment||null;
+    }
+    const initError=initData&&initData.error?String(initData.error):'';
+    const shouldFallback=
+      initRes.status===404 ||
+      initRes.status===405 ||
+      /not configured/i.test(initError);
+    if(!shouldFallback){
+      throw new Error(initError||('Upload failed ('+initRes.status+')'));
+    }
+  }catch(initErr){
+    if(!(initErr instanceof TypeError)){
+      const message=String(initErr&&initErr.message||'');
+      if(message && !/not configured/i.test(message) && !/404/.test(message) && !/405/.test(message)){
+        throw initErr;
+      }
+    }
+  }
+
   const form=new FormData();
   form.append('projectId',projectId);
   form.append('file',file,file.name);
@@ -2260,6 +2316,56 @@ function renderProjects(){
   grid.innerHTML=html;
 }
 function switchProj(id){ setProj(id); nav('dashboard'); }
+function getClientInvoicePaymentEntries(inv){
+  const entries=[...((inv&&inv.partialPayments)||[])].map(pp=>({...pp}));
+  const invoiceAmount=Math.max(0, Number(inv&&inv.amount||0));
+  const status=String(inv&&inv.status||'').toLowerCase();
+  const fallbackBalance=Math.max(0, Number(inv&&inv.balanceDue||0));
+  const manualPaid=Math.max(0, invoiceAmount-fallbackBalance);
+  const fullyPaid=!!(inv&&inv.paymentReceived)||status==='paid';
+  if(!entries.length&&manualPaid>0.009&&!fullyPaid){
+    entries.push({
+      id:'manual_'+(inv&&inv.id||'temp'),
+      amount:manualPaid,
+      date:inv&&inv.receivedDate||'',
+      note:'Recorded from invoice balance',
+      synthetic:true
+    });
+  }
+  const paidBeforeFinal=entries.reduce((sum,pp)=>sum+Math.max(0, Number(pp.amount||0)),0);
+  const remaining=Math.max(0, invoiceAmount-paidBeforeFinal);
+  if(fullyPaid&&(remaining>0.009||!entries.length)){
+    entries.push({
+      id:'final_'+(inv&&inv.id||'temp'),
+      amount:remaining>0.009?remaining:invoiceAmount,
+      date:inv&&inv.receivedDate||'',
+      note:'',
+      full:true,
+      synthetic:true
+    });
+  }
+  return entries.filter(pp=>Math.max(0, Number(pp.amount||0))||pp.date||pp.note);
+}
+function getClientInvoicePaidAmount(inv){
+  const amount=Math.max(0, Number(inv&&inv.amount||0));
+  const total=getClientInvoicePaymentEntries(inv).reduce((sum,pp)=>sum+Math.max(0, Number(pp.amount||0)),0);
+  return Math.min(amount, total);
+}
+function getClientInvoiceBalanceAmount(inv){
+  return Math.max(0, Number(inv&&inv.amount||0)-getClientInvoicePaidAmount(inv));
+}
+function getClientInvoiceLatestPaymentDate(inv){
+  const dated=getClientInvoicePaymentEntries(inv).filter(pp=>pp.date).map(pp=>pp.date).sort();
+  return dated.length?dated[dated.length-1]:(inv&&inv.receivedDate||'');
+}
+function getClientInvoiceStatus(inv){
+  const paid=getClientInvoicePaidAmount(inv);
+  const balance=getClientInvoiceBalanceAmount(inv);
+  const base=inv&&inv.status||'Draft';
+  if(balance<=0&&paid>0) return 'Paid';
+  if(paid>0) return 'Partial';
+  return base==='Paid'?'Draft':base;
+}
 function getClientInvoiceLedgerData(p){
   const entries=((p&&p.clientInvoices||[]).map(inv=>({
     project:p,
@@ -2274,11 +2380,12 @@ function getClientInvoiceLedgerData(p){
   const today=new Date();
   entries.forEach(({invoice:inv})=>{
     const amount=Number(inv.amount||0);
-    const balance=Math.max(0, Number(inv.balanceDue||0));
+    const balance=getClientInvoiceBalanceAmount(inv);
+    const status=getClientInvoiceStatus(inv);
     totalInvoiced+=amount;
     totalBalance+=balance;
-    totalPaid+=Math.max(0, amount-balance);
-    if(balance>0&&inv.dueDate&&new Date(inv.dueDate+'T12:00:00')<today&&(inv.status||'Draft')!=='Paid'&&(inv.status||'Draft')!=='Cancelled') overdueCount++;
+    totalPaid+=getClientInvoicePaidAmount(inv);
+    if(balance>0&&inv.dueDate&&new Date(inv.dueDate+'T12:00:00')<today&&status!=='Paid'&&status!=='Cancelled') overdueCount++;
   });
   return {entries,totalInvoiced,totalPaid,totalBalance,overdueCount};
 }
@@ -2291,13 +2398,13 @@ function buildClientInvoiceLedgerHTML(p, options={}){
   }
   const rows=(limit?data.entries.slice(0,limit):data.entries).map(({project,invoice:inv,linked},idx)=>{
     const amount=Number(inv.amount||0);
-    const balance=Math.max(0, Number(inv.balanceDue||0));
+    const balance=getClientInvoiceBalanceAmount(inv);
     const client=inv.clientName||project.clientOwnerName||'Client';
     const email=inv.clientEmail||project.clientOwnerEmail||(linked&&linked.clientEmail)||'-';
-    const status=inv.status||'Draft';
+    const status=getClientInvoiceStatus(inv);
     const rowBg=idx%2===0?'#fff':'var(--bg)';
-    const statusBg=status==='Paid'?'rgba(16,185,129,.12)':status==='Overdue'?'rgba(180,30,30,.12)':'rgba(12,27,46,.08)';
-    const statusColor=status==='Paid'?'#0f766e':status==='Overdue'?'#9f1239':'var(--navy)';
+    const statusBg=status==='Paid'?'rgba(16,185,129,.12)':status==='Partial'?'rgba(168,106,0,.12)':status==='Overdue'?'rgba(180,30,30,.12)':'rgba(12,27,46,.08)';
+    const statusColor=status==='Paid'?'#0f766e':status==='Partial'?'#A86A00':status==='Overdue'?'#9f1239':'var(--navy)';
     return `<tr style="background:${rowBg}">
       <td style="padding:8px 10px;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700;color:var(--navy)">${inv.invoiceNo||'Client Invoice'}</div><div style="font-size:10px;color:var(--muted)">${client}</div></td>
       <td style="padding:8px 10px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text)">${email}</td>
@@ -3838,6 +3945,10 @@ function openModal(type, id=null){
     const defaults=buildClientInvoiceDefaults(p2, defaultContractId);
     const contractOpts=(p2&&p2.clientContracts||[]).map(c=>`<option value="${c.id}" ${defaultContractId===c.id?'selected':''}>${c.contractTitle||c.clientName||'Contract'}</option>`).join('');
     const statuses=['Draft','Sent','Viewed','Paid','Partial','Overdue','Cancelled'];
+    const explicitPartialPaid=((o&&o.partialPayments)||[]).reduce((sum,pp)=>sum+Math.max(0, Number(pp.amount||0)),0);
+    const currentBalance=id?getClientInvoiceBalanceAmount(o):(hasVal(o.balanceDue)?o.balanceDue:defaults.balanceDue);
+    const fullyPaid=id?(getClientInvoiceBalanceAmount(o)<=0&&getClientInvoicePaidAmount(o)>0):(o.paymentReceived||o.status==='Paid');
+    const currentReceivedDate=id?getClientInvoiceLatestPaymentDate(o):(o.receivedDate||((o.paymentReceived||o.status==='Paid')?localDateStr():''));
     const clientNameListHTML=datalistHTML('client-name-options', getSavedNameOptions('client'));
     vEl('modal-title').textContent=(id?'Edit':'Add')+' Client Invoice';
     html=`
@@ -3850,9 +3961,10 @@ function openModal(type, id=null){
         <div class="fr"><label class="fl">Status</label><select class="fs" id="f-ci-status">${statuses.map(t=>`<option ${(hasVal(o.status)?o.status:defaults.status)===t?'selected':''}>${t}</option>`).join('')}</select></div>
       </div>
       <div class="fg">
-        <div class="fr"><label class="fl" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="f-ci-received" ${(o.paymentReceived||o.status==='Paid')?'checked':''} onchange="clientInvoiceReceivedToggle()"/> Payment Received</label></div>
-        <div class="fr"><label class="fl">Received Date</label><input class="fi" id="f-ci-received-date" type="date" value="${o.receivedDate||((o.paymentReceived||o.status==='Paid')?localDateStr():'')}"/></div>
+        <div class="fr"><label class="fl" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="f-ci-received" ${fullyPaid?'checked':''} onchange="clientInvoiceReceivedToggle()"/> Payment Received</label></div>
+        <div class="fr"><label class="fl">Received Date</label><input class="fi" id="f-ci-received-date" type="date" value="${currentReceivedDate}"/></div>
       </div>
+      ${explicitPartialPaid>0?`<div style="margin:-4px 0 12px;font-size:10px;color:var(--muted)">Recorded partial payments: ${fmtMoney(explicitPartialPaid)}. Remaining balance updates automatically.</div>`:''}
       ${p2?.clientOwnerName||p2?.clientOwnerEmail?`<div style="margin:-2px 0 12px;font-size:10px;color:var(--muted)">Client details come from this project's setup first, and you can still change them here for this invoice.</div>`:''}
       <div class="fg">
         <div class="fr"><label class="fl">Invoice Number *</label><input class="fi" id="f-ci-no" value="${hasVal(o.invoiceNo)?o.invoiceNo:defaults.invoiceNo}" placeholder="e.g. INV-2026-001"/></div>
@@ -3860,7 +3972,7 @@ function openModal(type, id=null){
       </div>
       <div class="fg">
         <div class="fr"><label class="fl">Invoice Amount ($)</label><input class="fi" id="f-ci-amt" type="number" value="${hasVal(o.amount)?o.amount:defaults.amount}" placeholder="0"/></div>
-        <div class="fr"><label class="fl">Balance Due ($)</label><input class="fi" id="f-ci-bal" type="number" value="${hasVal(o.balanceDue)?o.balanceDue:defaults.balanceDue}" placeholder="0"/></div>
+        <div class="fr"><label class="fl">Balance Due ($)</label><input class="fi" id="f-ci-bal" type="number" data-partial-paid="${explicitPartialPaid}" value="${currentBalance}" placeholder="0"/></div>
       </div>
       <div class="fg">
         <div class="fr"><label class="fl">Invoice Date</label><input class="fi" id="f-ci-date" type="date" value="${hasVal(o.invoiceDate)?o.invoiceDate:defaults.invoiceDate}"/></div>
@@ -4325,12 +4437,33 @@ async function saveModal(){
     const amountInput=vVal('f-ci-amt');
     const amount=amountInput===''&&hasVal(clientDefaults.amount)?(parseFloat(clientDefaults.amount)||0):(parseFloat(amountInput)||0);
     const balanceRaw=vVal('f-ci-bal');
-    const paymentReceived=!!vEl('f-ci-received')?.checked;
-    const receivedDate=paymentReceived?(vVal('f-ci-received-date')||localDateStr()):'';
+    const explicitPartialPayments=ex?ex.partialPayments||[]:[];
+    const explicitPartialTotal=explicitPartialPayments.reduce((sum,pp)=>sum+Math.max(0, Number(pp.amount||0)),0);
+    let paymentReceived=!!vEl('f-ci-received')?.checked;
+    let receivedDate=paymentReceived?(vVal('f-ci-received-date')||localDateStr()):'';
     let balanceDue=balanceRaw===''?amount:(parseFloat(balanceRaw)||0);
     let status=vVal('f-ci-status')||clientDefaults.status;
-    if(paymentReceived){balanceDue=0;status='Paid';}
-    const o={id:mId||uid(),clientName,clientEmail:vVal('f-ci-email')||clientDefaults.clientEmail,contractId,invoiceNo,status,amount,balanceDue,invoiceDate:vVal('f-ci-date')||clientDefaults.invoiceDate,dueDate:vVal('f-ci-due'),description:vVal('f-ci-desc')||clientDefaults.description,notes:vVal('f-ci-notes'),paymentReceived,receivedDate,files:ex?ex.files||[]:[],emailedAt:ex?ex.emailedAt:'',emailLastSentTo:ex?ex.emailLastSentTo:''};
+    balanceDue=Math.max(0, balanceDue);
+    if(paymentReceived){
+      balanceDue=0;
+      status='Paid';
+    }else if(explicitPartialTotal>0){
+      balanceDue=Math.max(0, amount-explicitPartialTotal);
+      paymentReceived=balanceDue<=0;
+      status=paymentReceived?'Paid':'Partial';
+      receivedDate=getClientInvoiceLatestPaymentDate({amount,partialPayments:explicitPartialPayments,receivedDate:ex?ex.receivedDate:''})||'';
+    }else if(balanceDue<=0&&amount>0){
+      paymentReceived=true;
+      status='Paid';
+      receivedDate=vVal('f-ci-received-date')||(ex&&ex.receivedDate)||localDateStr();
+    }else if(amount>0&&balanceDue<amount){
+      status='Partial';
+      receivedDate=vVal('f-ci-received-date')||(ex&&ex.receivedDate)||'';
+    }else{
+      if(status==='Paid') status='Draft';
+      receivedDate='';
+    }
+    const o={id:mId||uid(),clientName,clientEmail:vVal('f-ci-email')||clientDefaults.clientEmail,contractId,invoiceNo,status,amount,balanceDue,invoiceDate:vVal('f-ci-date')||clientDefaults.invoiceDate,dueDate:vVal('f-ci-due'),description:vVal('f-ci-desc')||clientDefaults.description,notes:vVal('f-ci-notes'),paymentReceived,receivedDate,partialPayments:explicitPartialPayments,files:ex?ex.files||[]:[],emailedAt:ex?ex.emailedAt:'',emailLastSentTo:ex?ex.emailLastSentTo:''};
     if(!p.clientInvoices)p.clientInvoices=[];
     if(mId){const i=p.clientInvoices.findIndex(x=>x.id===mId);if(i>-1)p.clientInvoices[i]=o;}else p.clientInvoices.push(o);
     if(o.status==='Sent'&&(!ex||ex.status!=='Sent')&&o.clientEmail) autoClientInvoiceId=o.id;
@@ -6326,12 +6459,15 @@ function renderClientInvoices(){
   }
   el.innerHTML=invoices.map(({project:p,invoice:inv,linked})=>{
     const files=(inv.files||[]);
-    const paymentReceived=!!inv.paymentReceived||String(inv.status||'').toLowerCase()==='paid';
-    const status=(paymentReceived?'Paid':(inv.status||'Draft'));
-    const balance=Number(inv.balanceDue||0);
+    const paymentEntries=getClientInvoicePaymentEntries(inv);
+    const paymentReceived=getClientInvoiceBalanceAmount(inv)<=0&&getClientInvoicePaidAmount(inv)>0;
+    const status=getClientInvoiceStatus(inv);
+    const balance=getClientInvoiceBalanceAmount(inv);
     const amount=Number(inv.amount||0);
-    const statusBg=status==='Paid'?'rgba(16,185,129,.12)':status==='Overdue'?'rgba(180,30,30,.12)':'rgba(12,27,46,.08)';
-    const statusColor=status==='Paid'?'#0f766e':status==='Overdue'?'#9f1239':'var(--navy)';
+    const paidAmount=getClientInvoicePaidAmount(inv);
+    const receivedDate=getClientInvoiceLatestPaymentDate(inv);
+    const statusBg=status==='Paid'?'rgba(16,185,129,.12)':status==='Partial'?'rgba(168,106,0,.12)':status==='Overdue'?'rgba(180,30,30,.12)':'rgba(12,27,46,.08)';
+    const statusColor=status==='Paid'?'#0f766e':status==='Partial'?'#A86A00':status==='Overdue'?'#9f1239':'var(--navy)';
     const filesHTML=files.length
       ?`<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">`
         +files.map(f=>`<div style="display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 10px">
@@ -6341,6 +6477,18 @@ function renderClientInvoices(){
           </div>`).join('')
         +`</div>`
       :'<div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px">No invoice files attached</div>';
+    const paymentHistoryHTML=paymentEntries.length
+      ?paymentEntries.map(pp=>`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;background:${pp.full?'#F3FCF0':'#FFF8EB'};border:1px solid ${pp.full?'rgba(45,106,15,.18)':'rgba(168,106,0,.24)'};border-radius:6px;padding:7px 9px">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:${pp.full?'#0f766e':'#A86A00'}">${fmtMoney(Number(pp.amount||0))}${pp.full?' final receipt':' partial receipt'}</div>
+            ${(pp.note||pp.synthetic)?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${pp.note||'Auto-calculated from invoice'}</div>`:''}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:10px;color:var(--muted);white-space:nowrap">${pp.date?fmtDate(pp.date):'-'}</div>
+            ${pp.synthetic?'':`<button onclick="removeClientInvoicePartialPayment('${inv.id}','${pp.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0 2px" title="Remove">×</button>`}
+          </div>
+        </div>`).join('')
+      :'<div style="font-size:11px;color:var(--muted);font-style:italic">No payments recorded yet</div>';
     return `<div class="panel" style="margin-bottom:14px">
       <div class="ph" style="background:var(--navy)">
         <div>
@@ -6362,13 +6510,23 @@ function renderClientInvoices(){
         <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Client Email</div><div style="font-size:12px">${inv.clientEmail||p.clientOwnerEmail||(linked&&linked.clientEmail)||'-'}</div></div>
         <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Linked Contract</div><div style="font-size:12px">${linked?(linked.contractTitle||linked.contractNo||'Contract'):'-'}</div></div>
         <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Invoice Amount</div><div style="font-size:14px;font-weight:700;font-family:'Barlow Condensed',sans-serif;color:var(--navy)">${amount?'$'+amount.toLocaleString():'-'}</div></div>
+        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Amount Received</div><div style="font-size:14px;font-weight:700;font-family:'Barlow Condensed',sans-serif;color:${paidAmount>0?'#0f766e':'var(--navy)'}">${'$'+paidAmount.toLocaleString()}</div></div>
         <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Balance Due</div><div style="font-size:14px;font-weight:700;font-family:'Barlow Condensed',sans-serif;color:${balance>0?'#9f1239':'#0f766e'}">${'$'+balance.toLocaleString()}</div></div>
         <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Invoice Date</div><div style="font-size:12px">${inv.invoiceDate?fmtDate(inv.invoiceDate):'-'}</div></div>
         <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Due Date</div><div style="font-size:12px">${inv.dueDate?fmtDate(inv.dueDate):'-'}</div></div>
-        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Payment Received</div><div style="font-size:12px;font-weight:600;color:${paymentReceived?'#0f766e':'var(--text)'}">${paymentReceived?'Yes':'No'}</div></div>
-        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Received Date</div><div style="font-size:12px">${inv.receivedDate?fmtDate(inv.receivedDate):'-'}</div></div>
+        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Payment Status</div><div style="font-size:12px;font-weight:600;color:${paymentReceived?'#0f766e':paidAmount>0?'#A86A00':'var(--text)'}">${paymentReceived?'Final received':paidAmount>0?'Partial received':'Not yet received'}</div></div>
+        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Latest Received</div><div style="font-size:12px">${receivedDate?fmtDate(receivedDate):'-'}</div></div>
         ${inv.description?`<div style="grid-column:1/-1"><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Description</div><div style="font-size:11px;color:var(--text)">${inv.description}</div></div>`:''}
         ${inv.notes?`<div style="grid-column:1/-1"><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Notes</div><div style="font-size:11px;color:var(--text)">${inv.notes}</div></div>`:''}
+        <div style="grid-column:1/-1">
+          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Payment Receipts</div>
+          <div style="display:flex;flex-direction:column;gap:6px">${paymentHistoryHTML}</div>
+          ${balance>0?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+            <input class="fi" id="cipamt_${inv.id}" type="number" placeholder="Partial amount ($)" style="flex:1;min-width:150px"/>
+            <input class="fi" id="cipdate_${inv.id}" type="date" value="${localDateStr()}" style="flex:1;min-width:150px"/>
+            <button class="btn btn-ghost btn-xs" style="font-size:10px" onclick="addClientInvoicePartialPayment('${inv.id}')">+ Partial Receive</button>
+          </div>`:''}
+        </div>
       </div>
       <div style="padding:10px 16px;border-top:1px solid var(--border)">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:4px">Invoice Documents (${files.length})</div>
@@ -6381,11 +6539,52 @@ function renderClientInvoices(){
 function markClientInvoiceReceived(cid){
   const ctx=getClientInvoiceContext(cid);
   if(!ctx.project||!ctx.invoice){toast('Client invoice not found');return;}
-  ctx.invoice.paymentReceived=true;
-  ctx.invoice.receivedDate=ctx.invoice.receivedDate||localDateStr();
-  ctx.invoice.status='Paid';
-  ctx.invoice.balanceDue=0;
-  saveDB();renderAll();toast('Payment marked as received');
+  const inv=ctx.invoice;
+  inv.partialPayments=inv.partialPayments||[];
+  const paidAlready=inv.partialPayments.reduce((sum,pp)=>sum+Math.max(0, Number(pp.amount||0)),0);
+  const remaining=Math.max(0, Number(inv.amount||0)-paidAlready);
+  const receivedDate=localDateStr();
+  if(remaining>0.009){
+    inv.partialPayments.push({id:uid(),amount:remaining,date:receivedDate,note:'',full:true});
+  }
+  inv.paymentReceived=true;
+  inv.receivedDate=receivedDate;
+  inv.status='Paid';
+  inv.balanceDue=0;
+  saveDB();renderAll();toast('Final payment marked as received');
+}
+
+function addClientInvoicePartialPayment(cid){
+  const ctx=getClientInvoiceContext(cid);
+  if(!ctx.project||!ctx.invoice){toast('Client invoice not found');return;}
+  const inv=ctx.invoice;
+  const amt=parseFloat(vEl('cipamt_'+cid)?.value)||0;
+  if(!amt){toast('Enter partial payment amount');return;}
+  inv.partialPayments=inv.partialPayments||[];
+  const paidAlready=inv.partialPayments.reduce((sum,pp)=>sum+Math.max(0, Number(pp.amount||0)),0);
+  const remaining=Math.max(0, Number(inv.amount||0)-paidAlready);
+  if(amt>remaining+0.009){toast('Partial payment cannot exceed remaining balance');return;}
+  const date=vEl('cipdate_'+cid)?.value||localDateStr();
+  const total=paidAlready+amt;
+  inv.partialPayments.push({id:uid(),amount:amt,date,note:'',full:total>=Number(inv.amount||0)-0.009});
+  inv.balanceDue=Math.max(0, Number(inv.amount||0)-total);
+  inv.paymentReceived=inv.balanceDue<=0;
+  inv.receivedDate=date;
+  inv.status=inv.paymentReceived?'Paid':'Partial';
+  saveDB();renderAll();toast(inv.paymentReceived?'Invoice fully paid':'Partial payment recorded');
+}
+
+function removeClientInvoicePartialPayment(cid, ppid){
+  const ctx=getClientInvoiceContext(cid);
+  if(!ctx.project||!ctx.invoice){toast('Client invoice not found');return;}
+  const inv=ctx.invoice;
+  inv.partialPayments=(inv.partialPayments||[]).filter(pp=>pp.id!==ppid);
+  const paid=inv.partialPayments.reduce((sum,pp)=>sum+Math.max(0, Number(pp.amount||0)),0);
+  inv.balanceDue=Math.max(0, Number(inv.amount||0)-paid);
+  inv.paymentReceived=inv.balanceDue<=0&&paid>0;
+  inv.receivedDate=(inv.partialPayments||[]).filter(pp=>pp.date).map(pp=>pp.date).sort().pop()||'';
+  inv.status=inv.paymentReceived?'Paid':(paid>0?'Partial':'Draft');
+  saveDB();renderAll();toast('Payment entry removed');
 }
 
 function delClientInvoice(cid){
@@ -6402,10 +6601,10 @@ function exportClientInvoiceLedgerPDF(){
   if(!data.entries.length){toast('⚠ No client invoices to export');return;}
   const rows=data.entries.map(({project,invoice:inv,linked},idx)=>{
     const amount=Number(inv.amount||0);
-    const balance=Math.max(0, Number(inv.balanceDue||0));
+    const balance=getClientInvoiceBalanceAmount(inv);
     const client=inv.clientName||project.clientOwnerName||'Client';
     const email=inv.clientEmail||project.clientOwnerEmail||(linked&&linked.clientEmail)||'—';
-    const status=inv.status||'Draft';
+    const status=getClientInvoiceStatus(inv);
     const bg=idx%2===0?'#fff':'#fafaf8';
     return '<tr style="background:'+bg+'">'
       +'<td style="padding:6px 8px;font-size:10px;font-weight:700;border-bottom:1px solid #eee">'+(inv.invoiceNo||'Client Invoice')+'<div style="font-size:9px;font-weight:400;color:#777;margin-top:2px">'+client+'</div></td>'
@@ -6475,10 +6674,10 @@ function _doClientInvoiceLedgerExcel(p){
         inv.invoiceDate||'',
         inv.dueDate||'',
         Number(inv.amount||0),
-        Number(inv.balanceDue||0),
-        inv.status||'Draft',
-        inv.paymentReceived||String(inv.status||'').toLowerCase()==='paid'?'Yes':'No',
-        inv.receivedDate||'',
+        Number(getClientInvoiceBalanceAmount(inv)||0),
+        getClientInvoiceStatus(inv),
+        getClientInvoicePaidAmount(inv)>0?'Yes':'No',
+        getClientInvoiceLatestPaymentDate(inv)||'',
         inv.description||''
       ]);
     });

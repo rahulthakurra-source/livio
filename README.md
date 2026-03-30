@@ -16,6 +16,9 @@ Create `backend/.env` from `backend/.env.example` and set:
 - `FRONTEND_ORIGIN`
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
+- `GCS_PROJECT_ID`, `GCS_BUCKET`, `GCS_CLIENT_EMAIL`, `GCS_PRIVATE_KEY` (recommended for large plan file uploads)
+- `GCS_BUCKET_LOCATION` (optional)
+- `GCS_SIGNED_URL_TTL_SECONDS` (optional)
 - `RESEND_API_KEY` and `RESEND_FROM` (recommended on Render)
 - `RESEND_REPLY_TO` (optional)
 - `SMTP_HOST`
@@ -99,3 +102,31 @@ SMTP_IGNORE_TLS=false
 ```
 
 Google requires an App Password for this flow. In your Google account, turn on 2-Step Verification first, then create an App Password and use that value for `SMTP_PASS`.
+
+## Attachments
+
+The backend can store attachment files in either Supabase Storage or Google Cloud Storage.
+
+- Supabase Storage works for smaller files, but your project-level Supabase limits still apply.
+- Google Cloud Storage is recommended for large plan files because the frontend uploads directly to Google using signed URLs instead of sending the whole file through Render.
+
+### Google Cloud Storage
+
+Set these backend environment variables in `backend/.env` for local runs and in your Render backend service for production:
+
+```env
+GCS_PROJECT_ID=your-google-cloud-project-id
+GCS_BUCKET=livio-project-files
+GCS_CLIENT_EMAIL=livio-storage@your-project-id.iam.gserviceaccount.com
+GCS_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GCS_BUCKET_LOCATION=US
+GCS_SIGNED_URL_TTL_SECONDS=900
+```
+
+Setup notes:
+
+- Create a Google Cloud Storage bucket first.
+- Create a service account with access to that bucket.
+- Store the service account email in `GCS_CLIENT_EMAIL`.
+- Store the private key in `GCS_PRIVATE_KEY`, keeping the `\n` line breaks escaped exactly as shown above.
+- Once these variables are set, attachment uploads automatically switch to Google signed URLs while attachment metadata remains in your existing database.

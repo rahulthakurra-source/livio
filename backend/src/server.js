@@ -13,8 +13,10 @@ import {
 } from "./vendorContractDocument.js";
 import {
   createAttachment,
+  createAttachmentUpload,
   deleteAttachmentById,
   downloadAttachment,
+  usesDirectAttachmentUploads,
 } from "./attachmentStore.js";
 import { config } from "./config.js";
 import {
@@ -326,6 +328,48 @@ app.post("/api/auth/forgot-password", async (req, res, next) => {
     });
 
     return res.json({ ok: true, to: email });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/api/attachments/upload-url", async (req, res, next) => {
+  try {
+    if (!usesDirectAttachmentUploads()) {
+      return res.status(400).json({
+        error: "Direct Google Cloud Storage uploads are not configured on the backend.",
+      });
+    }
+
+    const projectId = String(req.body?.projectId || "").trim();
+    const fileName = String(req.body?.fileName || "").trim();
+    const contentType = String(req.body?.contentType || "").trim();
+    const size = Number(req.body?.size || 0);
+
+    if (!projectId) {
+      return res.status(400).json({ error: "Project ID is required." });
+    }
+
+    if (!fileName) {
+      return res.status(400).json({ error: "File name is required." });
+    }
+
+    if (!Number.isFinite(size) || size <= 0) {
+      return res.status(400).json({ error: "File size is required." });
+    }
+
+    if (size > 200 * 1024 * 1024) {
+      return res.status(413).json({ error: "Attachment exceeds the 200 MB upload limit." });
+    }
+
+    const uploadPlan = await createAttachmentUpload({
+      projectId,
+      fileName,
+      contentType,
+      size,
+    });
+
+    return res.status(201).json(uploadPlan);
   } catch (error) {
     return next(error);
   }
