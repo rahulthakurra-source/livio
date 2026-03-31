@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { Storage } from "@google-cloud/storage";
 import { config } from "./config.js";
 import { supabase } from "./supabaseClient.js";
 
@@ -9,10 +8,7 @@ const ATTACHMENT_BUCKET_OPTIONS = {
   fileSizeLimit: 200 * 1024 * 1024,
   allowedMimeTypes: null,
 };
-const GCS_BUCKET_PREFIX = "gcs:";
 let attachmentBucketReadyPromise = null;
-let gcsBucketReadyPromise = null;
-let gcsClient = null;
 
 function sanitizeSegment(value) {
   return String(value || "")
@@ -38,71 +34,6 @@ function buildStoragePath(projectId, fileName) {
   const safeProject = sanitizeSegment(projectId || "unassigned") || "unassigned";
   const safeName = sanitizeSegment(fileName || "file") || "file";
   return `${safeProject}/${Date.now()}_${randomUUID()}_${safeName}`;
-}
-
-function hasGoogleCloudStorageConfigured() {
-  return Boolean(
-    config.gcsProjectId &&
-      config.gcsBucket &&
-      config.gcsClientEmail &&
-      config.gcsPrivateKey,
-  );
-}
-
-function getStoredBucketValue(providerBucket) {
-  if (hasGoogleCloudStorageConfigured() && providerBucket === config.gcsBucket) {
-    return `${GCS_BUCKET_PREFIX}${providerBucket}`;
-  }
-
-  return providerBucket;
-}
-
-function parseStoredBucketValue(storedBucket = "") {
-  const bucket = String(storedBucket || "");
-  if (bucket.startsWith(GCS_BUCKET_PREFIX)) {
-    return {
-      provider: "gcs",
-      bucketName: bucket.slice(GCS_BUCKET_PREFIX.length),
-    };
-  }
-
-  return {
-    provider: "supabase",
-    bucketName: bucket || config.attachmentBucket,
-  };
-}
-
-function getGoogleCloudStorageClient() {
-  if (!hasGoogleCloudStorageConfigured()) {
-    throw new Error("Google Cloud Storage is not configured.");
-  }
-
-  if (!gcsClient) {
-    gcsClient = new Storage({
-      projectId: config.gcsProjectId,
-      credentials: {
-        client_email: config.gcsClientEmail,
-        private_key: config.gcsPrivateKey,
-      },
-    });
-  }
-
-  return gcsClient;
-}
-
-function getGoogleCloudBucket() {
-  return getGoogleCloudStorageClient().bucket(config.gcsBucket);
-}
-
-function getAttachmentBucketCors() {
-  return [
-    {
-      origin: ["*"],
-      method: ["GET", "HEAD", "PUT"],
-      responseHeader: ["Content-Type", "Content-Length", "Content-Disposition"],
-      maxAgeSeconds: 3600,
-    },
-  ];
 }
 
 async function ensureSupabaseAttachmentBucket() {
@@ -159,36 +90,6 @@ async function ensureSupabaseAttachmentBucket() {
   return attachmentBucketReadyPromise;
 }
 
-async function ensureGoogleCloudBucket() {
-  if (!hasGoogleCloudStorageConfigured()) {
-    throw new Error("Google Cloud Storage is not configured.");
-  }
-
-  if (!gcsBucketReadyPromise) {
-    gcsBucketReadyPromise = (async () => {
-      const bucket = getGoogleCloudBucket();
-      const [exists] = await bucket.exists();
-
-      if (!exists) {
-        await getGoogleCloudStorageClient().createBucket(config.gcsBucket, {
-          location: config.gcsBucketLocation,
-          cors: getAttachmentBucketCors(),
-        });
-        return;
-      }
-
-      await bucket.setMetadata({
-        cors: getAttachmentBucketCors(),
-      });
-    })().catch((error) => {
-      gcsBucketReadyPromise = null;
-      throw error;
-    });
-  }
-
-  return gcsBucketReadyPromise;
-}
-
 async function insertAttachmentRecord({
   id,
   projectId,
@@ -219,86 +120,8 @@ async function insertAttachmentRecord({
   return normalizeAttachment(data);
 }
 
-async function removeStoredFile(bucketValue, storagePath) {
-  const target = parseStoredBucketValue(bucketValue);
-
-  if (target.provider === "gcs") {
-    const file = getGoogleCloudStorageClient().bucket(target.bucketName).file(storagePath);
-    await file.delete({ ignoreNotFound: true });
-    return;
-  }
-
-  await supabase.storage.from(target.bucketName).remove([storagePath]);
-}
-
-async function uploadBufferToGoogleCloud({
-  storagePath,
-  contentType,
-  buffer,
-}) {
-  await ensureGoogleCloudBucket();
-  const file = getGoogleCloudBucket().file(storagePath);
-  await file.save(buffer, {
-    contentType: contentType || "application/octet-stream",
-    resumable: false,
-  });
-}
-
 export function usesDirectAttachmentUploads() {
-  return hasGoogleCloudStorageConfigured();
-}
-
-export async function createAttachmentUpload({
-  projectId = "",
-  fileName,
-  contentType,
-  size,
-}) {
-  if (!hasGoogleCloudStorageConfigured()) {
-    throw new Error("Google Cloud Storage direct uploads are not configured.");
-  }
-
-  await ensureGoogleCloudBucket();
-
-  const id = `att_${randomUUID()}`;
-  const storagePath = buildStoragePath(projectId, fileName);
-  const bucket = getStoredBucketValue(config.gcsBucket);
-  const attachment = await insertAttachmentRecord({
-    id,
-    projectId,
-    fileName,
-    contentType,
-    size,
-    bucket,
-    storagePath,
-  });
-
-  try {
-    const file = getGoogleCloudBucket().file(storagePath);
-    const expires =
-      Date.now() + Math.max(60, Number(config.gcsSignedUrlTtlSeconds || 900)) * 1000;
-    const [url] = await file.getSignedUrl({
-      version: "v4",
-      action: "write",
-      expires,
-      contentType: contentType || "application/octet-stream",
-    });
-
-    return {
-      attachment,
-      upload: {
-        method: "PUT",
-        url,
-        headers: {
-          "Content-Type": contentType || "application/octet-stream",
-        },
-        expiresAt: new Date(expires).toISOString(),
-      },
-    };
-  } catch (error) {
-    await supabase.from(ATTACHMENTS_TABLE).delete().eq("id", id);
-    throw error;
-  }
+  return false;
 }
 
 export async function createAttachment({
@@ -310,29 +133,6 @@ export async function createAttachment({
 }) {
   const id = `att_${randomUUID()}`;
   const storagePath = buildStoragePath(projectId, fileName);
-
-  if (hasGoogleCloudStorageConfigured()) {
-    await uploadBufferToGoogleCloud({
-      storagePath,
-      contentType,
-      buffer,
-    });
-
-    try {
-      return await insertAttachmentRecord({
-        id,
-        projectId,
-        fileName,
-        contentType,
-        size,
-        bucket: getStoredBucketValue(config.gcsBucket),
-        storagePath,
-      });
-    } catch (error) {
-      await removeStoredFile(getStoredBucketValue(config.gcsBucket), storagePath);
-      throw error;
-    }
-  }
 
   await ensureSupabaseAttachmentBucket();
 
@@ -358,7 +158,7 @@ export async function createAttachment({
       storagePath,
     });
   } catch (error) {
-    await removeStoredFile(config.attachmentBucket, storagePath);
+    await supabase.storage.from(config.attachmentBucket).remove([storagePath]);
     throw error;
   }
 }
@@ -379,22 +179,9 @@ export async function getAttachmentById(attachmentId) {
 
 export async function downloadAttachment(attachmentId) {
   const attachment = await getAttachmentById(attachmentId);
-  const target = parseStoredBucketValue(attachment.bucket);
-
-  if (target.provider === "gcs") {
-    const [buffer] = await getGoogleCloudStorageClient()
-      .bucket(target.bucketName)
-      .file(attachment.storagePath)
-      .download();
-
-    return {
-      attachment,
-      buffer,
-    };
-  }
 
   const { data, error } = await supabase.storage
-    .from(target.bucketName)
+    .from(attachment.bucket || config.attachmentBucket)
     .download(attachment.storagePath);
 
   if (error) {
@@ -411,7 +198,9 @@ export async function downloadAttachment(attachmentId) {
 export async function deleteAttachmentById(attachmentId) {
   const attachment = await getAttachmentById(attachmentId);
 
-  await removeStoredFile(attachment.bucket, attachment.storagePath);
+  await supabase.storage
+    .from(attachment.bucket || config.attachmentBucket)
+    .remove([attachment.storagePath]);
 
   const { error } = await supabase
     .from(ATTACHMENTS_TABLE)

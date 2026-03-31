@@ -1520,6 +1520,7 @@ function normalizeDB(input){
   return db;
 }
 const LOCAL_DB_KEY = 'livio_local_db_v1';
+const LOCAL_APP_SNAPSHOT_KEY = 'livio_local_app_snapshot_v1';
 function readLocalDBCache(){
   try{
     const raw=localStorage.getItem(LOCAL_DB_KEY);
@@ -1540,10 +1541,26 @@ function writeLocalDBCache(db){
 function loadDB(){
   return readLocalDBCache() || normalizeDB(defaultDB());
 }
+function readLocalAppSnapshot(){
+  try{
+    const raw=localStorage.getItem(LOCAL_APP_SNAPSHOT_KEY);
+    if(!raw) return null;
+    const parsed=JSON.parse(raw);
+    return parsed&&typeof parsed==='object' ? parsed : null;
+  }catch(e){
+    console.warn('local app snapshot read failed:',e);
+    return null;
+  }
+}
+function getLocalSnapshotSavedAt(){
+  const snapshot=readLocalAppSnapshot();
+  return String(snapshot&&snapshot.savedAt||'').trim();
+}
 function saveDB(){
   try{
     DB=normalizeDB(DB);
     writeLocalDBCache(DB);
+    markLocalAppStateSaved();
   }catch(e){
     const msg=e.name==='QuotaExceededError'||e.code===22
       ?'⚠ Save failed before remote sync could run.'
@@ -2101,6 +2118,41 @@ function buildAppSnapshot(){
     savedAt:new Date().toISOString()
   };
 }
+function writeLocalAppSnapshot(snapshot){
+  try{
+    const payload={
+      db:normalizeDB(snapshot&&snapshot.db||DB),
+      users:((snapshot&&snapshot.users)||APP_STATE.users||DEFAULT_USERS).map(normalizeUserRecord),
+      roles:[...((snapshot&&snapshot.roles)||APP_STATE.roles||DEFAULT_ROLES)],
+      perms:JSON.parse(JSON.stringify((snapshot&&snapshot.perms)||APP_STATE.perms||{})),
+      resets:JSON.parse(JSON.stringify((snapshot&&snapshot.resets)||APP_STATE.resets||{})),
+      savedAt:String(snapshot&&snapshot.savedAt||new Date().toISOString())
+    };
+    localStorage.setItem(LOCAL_APP_SNAPSHOT_KEY, JSON.stringify(payload));
+  }catch(e){
+    console.warn('local app snapshot write failed:',e);
+  }
+}
+function markLocalAppStateSaved(savedAt=new Date().toISOString()){
+  writeLocalAppSnapshot({
+    db:DB,
+    users:APP_STATE.users,
+    roles:APP_STATE.roles,
+    perms:APP_STATE.perms,
+    resets:APP_STATE.resets,
+    savedAt
+  });
+}
+function hydrateLocalAppSnapshot(){
+  const snapshot=readLocalAppSnapshot();
+  if(!snapshot||typeof snapshot!=='object') return;
+  if(snapshot.db) DB=normalizeDB(snapshot.db);
+  APP_STATE.users=((snapshot.users&&snapshot.users.length)?snapshot.users:DEFAULT_USERS).map(normalizeUserRecord);
+  APP_STATE.roles=[...((snapshot.roles&&snapshot.roles.length)?snapshot.roles:DEFAULT_ROLES)];
+  APP_STATE.perms=JSON.parse(JSON.stringify(snapshot.perms||{}));
+  APP_STATE.resets=JSON.parse(JSON.stringify(snapshot.resets||{}));
+  writeLocalDBCache(DB);
+}
 function applyAppSnapshot(snapshot){
   if(!snapshot||!snapshot.db) throw new Error('Remote payload is missing app state');
   const deprecatedRemoteIds=((snapshot.db.projects)||[]).filter(project=>isDeprecatedProject(project)).map(project=>project.id).filter(Boolean);
@@ -2114,6 +2166,7 @@ function applyAppSnapshot(snapshot){
   APP_STATE.resets=JSON.parse(JSON.stringify(snapshot.resets||{}));
   if(!DB.activeId) DB.activeId=DB.projects[0]?.id||'';
   registerAllFiles();
+  markLocalAppStateSaved(snapshot.snapshotSavedAt||snapshot.savedAt||new Date().toISOString());
   reconcileCurrentUser();
   applyCurrentUserUI(false);
   buildSidebarNav();
@@ -2143,6 +2196,7 @@ async function syncAppStateToSupabase(silent=true){
       APP_STATE.roles=[...(data.roles||APP_STATE.roles||DEFAULT_ROLES)];
       APP_STATE.perms=JSON.parse(JSON.stringify(data.perms||APP_STATE.perms||{}));
       APP_STATE.resets=JSON.parse(JSON.stringify(data.resets||APP_STATE.resets||{}));
+      markLocalAppStateSaved(data.snapshotSavedAt||new Date().toISOString());
     }
     return true;
   }catch(e){
@@ -2265,6 +2319,7 @@ function scheduleDailyTrackerAutoRefresh(){
   },8000);
 }
 function scheduleSupabasePush(){
+  markLocalAppStateSaved();
   const cfg=getSupabaseConfig();
   if(!normalizeApiBase(cfg.url)) return;
   if(supabasePushTimer) clearTimeout(supabasePushTimer);
@@ -2276,21 +2331,30 @@ async function bootstrapSupabase(){
   if(!client) return;
   try{
     const data=await backendRequest('/bootstrap');
-    if(data&&data.db&&Array.isArray(data.db.projects)&&data.db.projects.length){
+    const localSavedAt=getLocalSnapshotSavedAt();
+    const remoteSavedAt=String(data&&data.snapshotSavedAt||'').trim();
+    if(localSavedAt && (!remoteSavedAt || localSavedAt>remoteSavedAt)){
+      setRemoteProjectIds(data&&data.db&&Array.isArray(data.db.projects)?data.db.projects:[]);
+      await pushToSupabase(true);
+      setSupabaseStatus('Using newer local data from this browser and re-syncing the backend.','warn');
+    }else if(data&&data.db&&Array.isArray(data.db.projects)&&data.db.projects.length){
       applyAppSnapshot(data);
       setSupabaseStatus('Loaded remote app state from backend on startup.','ok');
     }else{
-      const defaults=defaultAppSnapshot();
-      DB=normalizeDB(defaults.db);
-      APP_STATE.users=defaults.users.map(normalizeUserRecord);
-      APP_STATE.roles=[...defaults.roles];
-      APP_STATE.perms=JSON.parse(JSON.stringify(defaults.perms));
-      APP_STATE.resets=JSON.parse(JSON.stringify(defaults.resets));
-      registerAllFiles();
-      buildSidebarNav();
-      if(CURRENT_USER) renderAll();
+      if(!localSavedAt){
+        const defaults=defaultAppSnapshot();
+        DB=normalizeDB(defaults.db);
+        APP_STATE.users=defaults.users.map(normalizeUserRecord);
+        APP_STATE.roles=[...defaults.roles];
+        APP_STATE.perms=JSON.parse(JSON.stringify(defaults.perms));
+        APP_STATE.resets=JSON.parse(JSON.stringify(defaults.resets));
+        registerAllFiles();
+        buildSidebarNav();
+        if(CURRENT_USER) renderAll();
+        markLocalAppStateSaved(defaults.savedAt);
+      }
       await pushToSupabase(true);
-      setSupabaseStatus('Backend connected. A fresh remote app state was created.','ok');
+      setSupabaseStatus(localSavedAt?'Backend connected. Local data was restored to the backend.':'Backend connected. A fresh remote app state was created.','ok');
     }
   }catch(e){
     setSupabaseStatus('Backend startup sync skipped: '+e.message,'warn');
@@ -2338,6 +2402,7 @@ function nav(page) {
   strip.classList.toggle('show', page==='payments');
   curPage=page;
   scheduleDailyTrackerAutoRefresh();
+  if(page!=='dailytracker') refreshActiveProjectFromSupabase({silent:true});
   renderAll();
 }
 function handleAdd(){ nav(curPage); }
@@ -7190,7 +7255,7 @@ const ALL_PAGES=[
 function getPerms(){
   return APP_STATE.perms||{};
 }
-function savePerms(perms){APP_STATE.perms=JSON.parse(JSON.stringify(perms||{}));scheduleSupabasePush();}
+function savePerms(perms){APP_STATE.perms=JSON.parse(JSON.stringify(perms||{}));markLocalAppStateSaved();scheduleSupabasePush();}
 
 // Get pages accessible by a user (Admin gets all)
 function getUserPages(user){
@@ -7332,7 +7397,7 @@ function saveAccessControl(uid){
 function getRoles(){
   return (APP_STATE.roles&&APP_STATE.roles.length)?APP_STATE.roles:[...DEFAULT_ROLES];
 }
-function saveRoles(roles){APP_STATE.roles=[...(roles&&roles.length?roles:DEFAULT_ROLES)];scheduleSupabasePush();}
+function saveRoles(roles){APP_STATE.roles=[...(roles&&roles.length?roles:DEFAULT_ROLES)];markLocalAppStateSaved();scheduleSupabasePush();}
 function refreshRolesList(){
   const sel=document.getElementById('nu-role');
   if(!sel)return;
@@ -7397,6 +7462,8 @@ function getUsers(){
 }
 function saveUsers(users){
   APP_STATE.users=JSON.parse(JSON.stringify(Array.isArray(users)?users:[]));
+  markLocalAppStateSaved();
+  scheduleSupabasePush();
   syncUsersToSupabase(true);
 }
 
@@ -7781,6 +7848,9 @@ window.addEventListener('pagehide',()=>{
   if(activeProjectId) syncProjectToSupabase(activeProjectId,true);
   syncAppStateToSupabase(true);
 });
+hydrateLocalAppSnapshot();
+Object.keys(FA).forEach(k=>delete FA[k]);
+registerAllFiles();
 CURRENT_USER=restoreCurrentUser();
 applyCurrentUserUI(false);
 if(!CURRENT_USER) setTimeout(()=>document.getElementById('login-user')?.focus(),100);
@@ -7789,6 +7859,19 @@ bootstrapSupabase().finally(()=>{
   applyCurrentUserUI(false);
   if(!CURRENT_USER) setTimeout(()=>document.getElementById('login-user')?.focus(),100);
 });
+
+// Re-sync when user switches back to this tab
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden&&CURRENT_USER){
+    const client=initSupabaseClient();
+    if(client) backendRequest('/bootstrap').then(data=>{applyAppSnapshot(data);}).catch(()=>{});
+  }
+});
+
+// Poll every 30s to pick up changes from other devices
+setInterval(()=>{
+  if(!document.hidden&&CURRENT_USER) refreshActiveProjectFromSupabase({silent:true});
+},30000);
 </script>
 </body>
 </html>

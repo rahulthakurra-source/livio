@@ -13,7 +13,6 @@ import {
 } from "./vendorContractDocument.js";
 import {
   createAttachment,
-  createAttachmentUpload,
   deleteAttachmentById,
   downloadAttachment,
   usesDirectAttachmentUploads,
@@ -52,6 +51,17 @@ const upload = multer({
     fileSize: 200 * 1024 * 1024,
   },
 });
+
+function computeSnapshotSavedAt(projects = [], appState = {}) {
+  const timestamps = [
+    ...projects
+      .map((project) => String(project?.updatedAt || "").trim())
+      .filter(Boolean),
+    String(appState?.updatedAt || "").trim(),
+  ].filter(Boolean);
+
+  return timestamps.sort().at(-1) || "";
+}
 
 function getClientInvoicePayload(body = {}) {
   const project = body.project && typeof body.project === "object" ? body.project : {};
@@ -185,6 +195,7 @@ app.get("/api/bootstrap", async (_req, res, next) => {
       roles: appState.roles || [],
       perms: appState.perms || {},
       resets: appState.resets || {},
+      snapshotSavedAt: computeSnapshotSavedAt(projects, appState),
     });
   } catch (error) {
     next(error);
@@ -219,6 +230,7 @@ app.put("/api/bootstrap", async (req, res, next) => {
       roles: savedAppState.roles,
       perms: savedAppState.perms,
       resets: savedAppState.resets,
+      snapshotSavedAt: computeSnapshotSavedAt(savedProjects, savedAppState),
     });
   } catch (error) {
     next(error);
@@ -515,6 +527,7 @@ app.put("/api/app-state", async (req, res, next) => {
       roles: savedAppState.roles,
       perms: savedAppState.perms,
       resets: savedAppState.resets,
+      snapshotSavedAt: computeSnapshotSavedAt([], savedAppState),
     });
   } catch (error) {
     next(error);
