@@ -9,14 +9,28 @@ function makeBlankItem(config) {
   return blank;
 }
 
-export function CollectionEditor({
-  project,
-  sectionKey,
-  onSave,
-}) {
+function getItemLabel(item) {
+  return (
+    item.name ||
+    item.vendor ||
+    item.client ||
+    item.contractNo ||
+    item.invoiceNo ||
+    item.refNo ||
+    item.ref ||
+    item.id
+  );
+}
+
+function getItemMeta(item) {
+  return item.status || item.date || item.inspDate || item.invoiceDate || item.category || "Draft";
+}
+
+export function CollectionEditor({ project, sectionKey, onSave }) {
   const config = SECTION_CONFIGS[sectionKey];
   const [draft, setDraft] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const list = Array.isArray(project?.[sectionKey]) ? project[sectionKey] : [];
@@ -59,61 +73,81 @@ export function CollectionEditor({
   }
 
   async function handleSave() {
-    await onSave({
-      ...project,
-      [sectionKey]: draft,
-    });
+    setSaving(true);
+    try {
+      await onSave({
+        ...project,
+        [sectionKey]: draft,
+      });
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <div className="split-grid">
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>{config.title}</h2>
-            <p>{draft.length} item(s)</p>
-          </div>
-          <button className="button primary" onClick={addItem}>
-            Add {config.itemTitle}
-          </button>
+    <>
+      <section className="page-head">
+        <div>
+          <h1>{config.title}</h1>
+          <p className="muted">{config.subtitle || `${draft.length} item(s)`}</p>
         </div>
-
-        <div className="list-stack">
-          {draft.length === 0 ? (
-            <div className="empty-state">No items yet.</div>
-          ) : (
-            draft.map((item) => (
-              <button
-                key={item.id}
-                className={`list-card ${selectedId === item.id ? "active" : ""}`}
-                onClick={() => setSelectedId(item.id)}
-              >
-                <div>
-                  <strong>{item.name || item.vendor || item.refNo || item.id}</strong>
-                  <span className="muted">
-                    {item.status || item.date || item.invoiceNo || item.category || "Draft"}
-                  </span>
-                </div>
-                <span className="pill">{item.id}</span>
-              </button>
-            ))
-          )}
+        <div className="button-row wrap">
+          <button className="button primary" onClick={addItem}>
+            {config.addLabel || `+ Add ${config.itemTitle}`}
+          </button>
+          <button className="button ghost" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
         </div>
       </section>
 
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>{selectedItem ? config.itemTitle : "Select an item"}</h2>
-            <p>Edit the selected item and save changes for this project.</p>
+      <div className="split-grid legacy-sections">
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>{config.title}</h2>
+              <p>{draft.length} record(s)</p>
+            </div>
           </div>
-          <button className="button primary" onClick={handleSave}>
-            Save section
-          </button>
-        </div>
 
-        {selectedItem ? (
-          <>
+          <div className="list-stack">
+            {draft.length === 0 ? (
+              <div className="empty-state">No items yet.</div>
+            ) : (
+              draft.map((item) => (
+                <button
+                  key={item.id}
+                  className={`list-card ${selectedId === item.id ? "active" : ""}`}
+                  onClick={() => setSelectedId(item.id)}
+                >
+                  <div>
+                    <strong>{getItemLabel(item)}</strong>
+                    <span className="muted">{getItemMeta(item)}</span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>{selectedItem ? getItemLabel(selectedItem) : `Select ${config.itemTitle}`}</h2>
+              <p>
+                {selectedItem
+                  ? "Edit the selected record and save it for this project."
+                  : "Pick a record on the left or create a new one."}
+              </p>
+            </div>
+            {selectedItem ? (
+              <button className="button ghost danger" onClick={() => removeItem(selectedItem.id)}>
+                Delete
+              </button>
+            ) : null}
+          </div>
+
+          {selectedItem ? (
             <div className="form-grid">
               {config.fields.map((field) => (
                 <label key={field.key} className={field.type === "textarea" ? "span-two" : ""}>
@@ -147,21 +181,11 @@ export function CollectionEditor({
                 </label>
               ))}
             </div>
-
-            <div className="json-block">
-              <div className="json-head">
-                <strong>Raw item JSON</strong>
-                <button className="button ghost" onClick={() => removeItem(selectedItem.id)}>
-                  Delete item
-                </button>
-              </div>
-              <pre>{JSON.stringify(selectedItem, null, 2)}</pre>
-            </div>
-          </>
-        ) : (
-          <div className="empty-state">Pick a row on the left or create a new item.</div>
-        )}
-      </section>
-    </div>
+          ) : (
+            <div className="empty-state">Select a record to edit details.</div>
+          )}
+        </section>
+      </div>
+    </>
   );
 }

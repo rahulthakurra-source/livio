@@ -7,11 +7,8 @@ export function PaymentsPage({ project }) {
     <>
       <section className="page-head">
         <div>
-          <div className="eyebrow">Payments</div>
-          <h1>Payment overview</h1>
-          <p className="muted">
-            This page is derived from milestones, quote payment milestones, and invoices.
-          </p>
+          <h1>Payments</h1>
+          <p className="muted">Approved quotes only | Payment milestones | Balance tracking</p>
         </div>
       </section>
 
@@ -36,15 +33,15 @@ export function PaymentsPage({ project }) {
       <section className="panel">
         <div className="panel-head">
           <div>
-            <h2>Payment ledger</h2>
-            <p>Read-only in this first React pass.</p>
+            <h2>Payment Ledger</h2>
+            <p>Derived from milestones, quote payment milestones, and invoice records.</p>
           </div>
         </div>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Line item</th>
+                <th>Line Item</th>
                 <th>Scheduled</th>
                 <th>Received</th>
                 <th>Balance</th>
@@ -54,7 +51,7 @@ export function PaymentsPage({ project }) {
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan="4" className="empty-cell">
-                    No payment rows derived yet.
+                    No payment rows available yet.
                   </td>
                 </tr>
               ) : (

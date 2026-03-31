@@ -102,6 +102,8 @@ export function normalizeProject(project = {}) {
 export const SECTION_CONFIGS = {
   works: {
     title: "Works at Site",
+    subtitle: "CBC 2022 | CalOSHA | ACI 318",
+    addLabel: "+ Add Work",
     itemTitle: "Work item",
     fields: [
       { key: "name", label: "Name", type: "text" },
@@ -114,6 +116,8 @@ export const SECTION_CONFIGS = {
   },
   milestones: {
     title: "Milestones",
+    subtitle: "Project milestone planning and payment tracking",
+    addLabel: "+ Add Milestone",
     itemTitle: "Milestone",
     fields: [
       { key: "name", label: "Name", type: "text" },
@@ -126,6 +130,8 @@ export const SECTION_CONFIGS = {
   },
   vendorProfiles: {
     title: "Vendor Directory",
+    subtitle: "Add each vendor once, then reuse them across project tabs",
+    addLabel: "+ Add Vendor",
     itemTitle: "Vendor",
     fields: [
       { key: "name", label: "Vendor name", type: "text" },
@@ -137,7 +143,9 @@ export const SECTION_CONFIGS = {
     ],
   },
   quotes: {
-    title: "Quotes",
+    title: "Quotes Received",
+    subtitle: "CSI divisions, scope review, and pricing comparisons",
+    addLabel: "+ Add Quote",
     itemTitle: "Quote",
     fields: [
       { key: "vendor", label: "Vendor", type: "text" },
@@ -150,7 +158,9 @@ export const SECTION_CONFIGS = {
     ],
   },
   plans: {
-    title: "Plans and Documents",
+    title: "Plans & Documents",
+    subtitle: "Drawings, permits, reports, and project files",
+    addLabel: "+ Upload Document",
     itemTitle: "Plan file",
     fields: [
       { key: "name", label: "File name", type: "text" },
@@ -159,7 +169,9 @@ export const SECTION_CONFIGS = {
     ],
   },
   inspections: {
-    title: "Inspections",
+    title: "Inspections Scheduled",
+    subtitle: "Inspection dates, contacts, and field notes",
+    addLabel: "+ Add Inspection",
     itemTitle: "Inspection",
     fields: [
       { key: "name", label: "Name", type: "text" },
@@ -172,7 +184,9 @@ export const SECTION_CONFIGS = {
     ],
   },
   invoices: {
-    title: "Invoices",
+    title: "Invoice Tracker",
+    subtitle: "Vendor invoices, due dates, and approval status",
+    addLabel: "+ Add Invoice",
     itemTitle: "Invoice",
     fields: [
       { key: "vendor", label: "Vendor", type: "text" },
@@ -186,6 +200,8 @@ export const SECTION_CONFIGS = {
   },
   vendors: {
     title: "Vendor Contracts",
+    subtitle: "Subcontractor agreements, values, and contract dates",
+    addLabel: "+ Add Contract",
     itemTitle: "Vendor contract",
     fields: [
       { key: "vendor", label: "Vendor", type: "text" },
@@ -200,6 +216,8 @@ export const SECTION_CONFIGS = {
   },
   clientContracts: {
     title: "Client Contracts",
+    subtitle: "Client-side contract records and job value tracking",
+    addLabel: "+ Add Contract",
     itemTitle: "Client contract",
     fields: [
       { key: "client", label: "Client", type: "text" },
@@ -213,6 +231,8 @@ export const SECTION_CONFIGS = {
   },
   clientInvoices: {
     title: "Client Invoices",
+    subtitle: "Issued invoices, dates, and collection status",
+    addLabel: "+ Add Invoice",
     itemTitle: "Client invoice",
     fields: [
       { key: "client", label: "Client", type: "text" },
@@ -225,6 +245,8 @@ export const SECTION_CONFIGS = {
   },
   checklist: {
     title: "Checklist",
+    subtitle: "Project checklist items, ownership, and follow-up",
+    addLabel: "+ Add Checklist Item",
     itemTitle: "Checklist item",
     fields: [
       { key: "name", label: "Name", type: "text" },
@@ -238,6 +260,8 @@ export const SECTION_CONFIGS = {
   },
   qaqcLog: {
     title: "QA/QC Log",
+    subtitle: "Observations, corrective actions, and closeout status",
+    addLabel: "+ Add QA/QC Item",
     itemTitle: "QA/QC item",
     fields: [
       { key: "refNo", label: "Reference no.", type: "text" },

@@ -5,19 +5,16 @@ export function ExportPage({ project }) {
     <>
       <section className="page-head">
         <div>
-          <div className="eyebrow">Export</div>
-          <h1>Project export</h1>
-          <p className="muted">
-            This React version keeps export simple while the richer document generators are rebuilt.
-          </p>
+          <h1>Export</h1>
+          <p className="muted">Download a full project backup for records and transfer</p>
         </div>
       </section>
 
       <section className="panel">
         <div className="panel-head">
           <div>
-            <h2>JSON backup</h2>
-            <p>Downloads the full project object exactly as it is sent to the API.</p>
+            <h2>Project JSON Backup</h2>
+            <p>Downloads the complete project object exactly as stored by the API.</p>
           </div>
           <button
             className="button primary"

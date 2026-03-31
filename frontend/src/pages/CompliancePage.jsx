@@ -7,12 +7,8 @@ export function CompliancePage({ project }) {
     <>
       <section className="page-head">
         <div>
-          <div className="eyebrow">Compliance</div>
-          <h1>Compliance and quality snapshot</h1>
-          <p className="muted">
-            This first React pass keeps compliance as a summary instead of recreating the entire
-            legacy presentation layer.
-          </p>
+          <h1>Compliance</h1>
+          <p className="muted">Checklist, QA/QC, and inspection summary</p>
         </div>
       </section>
 
@@ -20,12 +16,12 @@ export function CompliancePage({ project }) {
         <article className="stat-card">
           <span>Open checklist items</span>
           <strong>{checklistOpen}</strong>
-          <p>Actionable items not yet marked done</p>
+          <p>Items not yet marked done</p>
         </article>
         <article className="stat-card">
           <span>Open QA/QC items</span>
           <strong>{qaqcOpen}</strong>
-          <p>Observations and punch items still active</p>
+          <p>Observations still active</p>
         </article>
         <article className="stat-card">
           <span>Inspections logged</span>
