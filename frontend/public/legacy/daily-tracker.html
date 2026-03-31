@@ -614,6 +614,64 @@ function saveParentTrackerState(){
   return false;
 }
 
+function showTrackerSaveWarning(message){
+  const text = String(message || 'Daily Tracker save failed.');
+  try{
+    if(window.parent && window.parent !== window){
+      if(typeof window.parent.setSupabaseStatus === 'function'){
+        window.parent.setSupabaseStatus(text, 'err');
+      }
+      if(typeof window.parent.toast === 'function'){
+        window.parent.toast(text, 5000);
+        return;
+      }
+    }
+  }catch(_err){}
+  console.warn(text);
+}
+
+function getParentBackendRequest(){
+  try{
+    if(window.parent && window.parent !== window && typeof window.parent.backendRequest === 'function'){
+      return window.parent.backendRequest.bind(window.parent);
+    }
+  }catch(_err){}
+  return null;
+}
+
+async function trackerBackendRequest(path, options={}){
+  const parentRequest = getParentBackendRequest();
+  if(parentRequest){
+    return parentRequest(path, options);
+  }
+  const baseUrl = getBackendBaseUrl();
+  if(!baseUrl) throw new Error('Missing backend URL.');
+  const headers = {
+    Accept:'application/json',
+    ...(options.body ? {'Content-Type':'application/json'} : {}),
+    ...(options.headers || {})
+  };
+  const res = await fetch(baseUrl + path,{
+    method:options.method || 'GET',
+    headers,
+    body:options.body,
+    keepalive:!!options.keepalive
+  });
+  const text = await res.text();
+  let data = null;
+  if(text){
+    try{ data = JSON.parse(text); }
+    catch(_err){ data = text; }
+  }
+  if(!res.ok){
+    const error = new Error((data && data.error) || ('Request failed (' + res.status + ')'));
+    error.status = res.status;
+    error.data = data;
+    throw error;
+  }
+  return data;
+}
+
 function normalizeApiBase(url){
   const clean = String(url || '').trim().replace(/\/+$/,'');
   if(!clean) return '';
@@ -673,6 +731,45 @@ function mediaStorageHelpText(){
   return hasBackendAttachmentStorage()
     ? 'Pictures are uploaded to project storage under the selected checklist category.'
     : 'Pictures are saved only in this browser until backend storage is configured.';
+}
+
+async function pushTrackerStateToBackend(retryOnConflict=true){
+  if(!getBackendBaseUrl() || !PROJECT_ID || PROJECT_ID === 'standalone') return false;
+  const snapshot = {
+    days: clone(days),
+    discItems: clone(discItems),
+    updatedAt: new Date().toISOString()
+  };
+  const current = await trackerBackendRequest('/projects/' + encodeURIComponent(PROJECT_ID));
+  const project = current && current.project ? current.project : null;
+  if(!project) throw new Error('Project not found.');
+  try{
+    const saved = await trackerBackendRequest('/projects/' + encodeURIComponent(PROJECT_ID),{
+      method:'PUT',
+      body:JSON.stringify({
+        project:{
+          ...project,
+          dailyTracker:snapshot
+        },
+        expectedUpdatedAt:String(project.updatedAt || '').trim()
+      }),
+      keepalive:true
+    });
+    const savedProject = saved && saved.project ? saved.project : null;
+    if(savedProject && savedProject.dailyTracker){
+      const parent = getParentProject();
+      if(parent){
+        parent.dailyTracker = clone(savedProject.dailyTracker);
+        parent.updatedAt = savedProject.updatedAt || parent.updatedAt;
+      }
+    }
+    return true;
+  }catch(err){
+    if(retryOnConflict && Number(err && err.status) === 409){
+      return pushTrackerStateToBackend(false);
+    }
+    throw err;
+  }
 }
 
 async function uploadAttachmentFile(file){
@@ -845,11 +942,48 @@ let discFilter = 'all';
 let expandedDisc = {};
 let currentDayTab = 'tCL';
 let cameraStream = null;
+let trackerSyncTimer = null;
+let trackerSyncChain = Promise.resolve();
+let lastTrackerSyncError = '';
+
+function queueTrackerBackendSync(delay=250){
+  if(trackerSyncTimer) clearTimeout(trackerSyncTimer);
+  if(!getBackendBaseUrl() || PROJECT_ID === 'standalone') return;
+  trackerSyncTimer = setTimeout(()=>{
+    trackerSyncTimer = null;
+    trackerSyncChain = trackerSyncChain
+      .catch(()=>null)
+      .then(()=>pushTrackerStateToBackend())
+      .then(()=>{
+        lastTrackerSyncError = '';
+        return true;
+      })
+      .catch(err=>{
+        const detail = String(err && err.message || 'Unknown save error');
+        console.error('daily tracker backend sync error:', err);
+        if(detail !== lastTrackerSyncError){
+          showTrackerSaveWarning('Daily Tracker save failed: ' + detail);
+          lastTrackerSyncError = detail;
+        }
+        return false;
+      });
+  },delay);
+}
+
+function flushTrackerBackendSync(){
+  if(!getBackendBaseUrl() || PROJECT_ID === 'standalone') return;
+  if(trackerSyncTimer){
+    clearTimeout(trackerSyncTimer);
+    trackerSyncTimer = null;
+  }
+  queueTrackerBackendSync(0);
+}
 
 const save = () => {
   localStorage.setItem(scopedKey('dt_days'),JSON.stringify(days));
   localStorage.setItem(scopedKey('dt_disc'),JSON.stringify(discItems));
   saveParentTrackerState();
+  queueTrackerBackendSync(250);
 };
 if(!parentTrackerState && (days.length || discItems.length)){
   saveParentTrackerState();
@@ -1670,6 +1804,11 @@ function exportAll(){
 }
 
 // ── INIT ──
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden) flushTrackerBackendSync();
+});
+window.addEventListener('pagehide',()=>{ flushTrackerBackendSync(); });
+window.addEventListener('beforeunload',()=>{ flushTrackerBackendSync(); });
 document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
 renderSidebar();
 renderDiscSidebar();
