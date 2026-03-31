@@ -184,6 +184,33 @@ function scoreDay(day) {
   return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
 }
 
+function countNaItems(day) {
+  let count = 0;
+  getChecklistSections(day).forEach((section) => {
+    getChecklistItems(day, section.key).forEach((item) => {
+      if (day.checks?.[item.id] === "na") {
+        count += 1;
+      }
+    });
+  });
+  return count;
+}
+
+function sectionTone(sectionKey) {
+  if (sectionKey === "foundation") return "f";
+  if (sectionKey === "rebar") return "r";
+  if (sectionKey === "formwork") return "fw";
+  return "cust";
+}
+
+function discussionStatusClass(status) {
+  const value = String(status || "").toLowerCase();
+  if (value === "done") return "done";
+  if (value === "in-progress" || value === "in progress") return "prog";
+  if (value === "discussion") return "disc";
+  return "pend";
+}
+
 function promptDay(day) {
   const date = window.prompt("Date (YYYY-MM-DD)", day?.date || toDateInputValue());
   if (date === null) return null;
@@ -741,15 +768,31 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
   const topbarDate = formatTopbarDate(
     selectedDay?.date || selectedDiscussion?.date || toDateInputValue(),
   );
+  const selectedDayScore = selectedDay ? scoreDay(selectedDay) : null;
+  const selectedDayNaCount = selectedDay
+    ? getChecklistSections(selectedDay).reduce(
+        (count, section) =>
+          count +
+          getChecklistItems(selectedDay, section.key).filter(
+            (item) => selectedDay.checks?.[item.id] === "na",
+          ).length,
+        0,
+      )
+    : 0;
+  const selectedDayRemaining = selectedDayScore
+    ? Math.max(selectedDayScore.total - selectedDayScore.done - selectedDayNaCount, 0)
+    : 0;
 
   return (
     <div className="tracker-page">
       <section className="tracker-topbar">
         <div className="tracker-brand">
-          <div className="tracker-brand-badge">DT</div>
+          <div className="tracker-brand-badge">{"\u{1F4CB}"}</div>
           <div className="tracker-brand-copy">
-            <strong>DailyTracker</strong>
-            <span>{project.name}</span>
+            <strong>
+              Daily<em>Tracker</em>
+            </strong>
+            <span>{project.name || "Project Tracker"}</span>
           </div>
         </div>
         <div className="tracker-date-pill">{topbarDate}</div>
@@ -779,13 +822,13 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
               className={`tracker-switch-btn ${sideView === "days" ? "active" : ""}`}
               onClick={() => setSideView("days")}
             >
-              Days
+              {"\u{1F4C5}"} Days
             </button>
             <button
               className={`tracker-switch-btn ${sideView === "discussions" ? "active" : ""}`}
               onClick={() => setSideView("discussions")}
             >
-              Discussions
+              {"\u{1F4AC}"} Discussions
             </button>
           </div>
 
@@ -817,6 +860,7 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                         </div>
                         <div className="tracker-list-content">
                           <strong>{formatShortDateLabel(day.date)}</strong>
+                          <span>{day.location || day.staff || "No site/location added"}</span>
                           <div className="tracker-progress">
                             <div className="tracker-progress-bar">
                               <span style={{ width: `${score.pct}%` }} />
@@ -914,11 +958,18 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                 <section className="tracker-hero">
                   <div>
                     <div className="eyebrow">Daily Site Work Review</div>
-                    <h2>{formatDateLabel(selectedDay.date)}</h2>
-                    <p className="tracker-hero-copy">
-                      {selectedDay.location || "No site/location added"} |{" "}
-                      {selectedDay.staff || "No site lead yet"}
-                    </p>
+                    <h2>
+                      Day {selectedDay.dayNum} <span className="tracker-day-sub">Daily Site Report</span>
+                    </h2>
+                    <div className="tracker-meta-row">
+                      <span className="tracker-meta-chip">{formatDateLabel(selectedDay.date)}</span>
+                      <span className="tracker-meta-chip">
+                        {selectedDay.location || "No site/location added"}
+                      </span>
+                      <span className="tracker-meta-chip">
+                        {selectedDay.staff || "No site lead yet"}
+                      </span>
+                    </div>
                   </div>
                   <div className="tracker-toolbar">
                     <button
@@ -938,21 +989,24 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
 
                 <section className="stats-grid">
                   <article className="stat-card">
-                    <span>Progress</span>
-                    <strong>{scoreDay(selectedDay).pct}%</strong>
-                    <p>
-                      {scoreDay(selectedDay).done}/{scoreDay(selectedDay).total} checklist items checked
-                    </p>
+                    <span>Checked</span>
+                    <strong>{selectedDayScore?.done ?? 0}</strong>
+                    <p>{selectedDayScore?.pct ?? 0}% progress</p>
                   </article>
                   <article className="stat-card">
-                    <span>Pictures</span>
+                    <span>Remaining</span>
+                    <strong>{selectedDayRemaining}</strong>
+                    <p>Checklist items still open</p>
+                  </article>
+                  <article className="stat-card">
+                    <span>N/A Items</span>
+                    <strong>{selectedDayNaCount}</strong>
+                    <p>Marked not applicable</p>
+                  </article>
+                  <article className="stat-card">
+                    <span>Media</span>
                     <strong>{selectedDay.media.length}</strong>
-                    <p>Stored under checklist categories</p>
-                  </article>
-                  <article className="stat-card">
-                    <span>Site lead / staff</span>
-                    <strong>{selectedDay.staff || "-"}</strong>
-                    <p>Assigned on this day</p>
+                    <p>Photos grouped by category</p>
                   </article>
                 </section>
 

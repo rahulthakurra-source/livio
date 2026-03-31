@@ -83,6 +83,8 @@ export function normalizeProject(project = {}) {
     address: project.address || "",
     permit: project.permit || "",
     apn: project.apn || "",
+    ownerName: project.ownerName || "",
+    ownerEmail: project.ownerEmail || "",
     type: project.type || "",
     color: project.color || "#1A6BC4",
     createdAt: project.createdAt || "",

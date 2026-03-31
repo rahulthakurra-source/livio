@@ -1,0 +1,1679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0D1117;--bg2:#161B22;--bg3:#1F2937;--bg4:#243040;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#F0F6FC;--text2:#8B949E;--text3:#484F58;
+  --orange:#FF6B2B;--og:rgba(255,107,43,0.18);--od:rgba(255,107,43,0.1);
+  --lime:#39D353;--ld:rgba(57,211,83,0.1);
+  --amber:#F0A824;--ad:rgba(240,168,36,0.12);
+  --blue:#58A6FF;--bd:rgba(88,166,255,0.1);
+  --purple:#BC8CFF;--pd:rgba(188,140,255,0.1);
+  --red:#F85149;--rd:rgba(248,81,73,0.1);
+  --r:10px;--r2:14px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:10px}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow:hidden}
+
+/* ── TOPBAR ── */
+.topbar{height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:rgba(13,17,23,0.97);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-icon{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#FF6B2B,#FF3D00);display:flex;align-items:center;justify-content:center;font-size:16px}
+.logo-text{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;letter-spacing:-0.3px}
+.logo-text em{color:var(--orange);font-style:normal}
+.topbar-center{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);background:var(--bg2);border:1px solid var(--border);padding:5px 12px;border-radius:20px}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 15px;border-radius:8px;font-size:13px;font-weight:600;font-family:'Plus Jakarta Sans',sans-serif;cursor:pointer;border:none;transition:all 0.15s}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border2)}
+.btn-ghost:hover{background:var(--bg3);color:var(--text)}
+.btn-orange{background:linear-gradient(135deg,#FF6B2B,#E85520);color:#fff}
+.btn-orange:hover{background:linear-gradient(135deg,#FF8C5A,#FF6B2B);transform:translateY(-1px)}
+.btn-sm{padding:5px 12px;font-size:11px;border-radius:7px}
+
+/* ── LAYOUT ── */
+.layout{display:flex;height:calc(100vh - 58px);overflow:hidden}
+
+/* ── SIDEBAR ── */
+.sidebar{width:252px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.sidebar-nav{display:flex;gap:0;padding:10px 12px 0;border-bottom:1px solid var(--border)}
+.snav-btn{flex:1;background:transparent;border:none;border-bottom:2px solid transparent;padding:7px 4px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:11px;color:var(--text3);cursor:pointer;transition:all 0.15s;text-align:center;margin-bottom:-1px}
+.snav-btn:hover{color:var(--text2)}
+.snav-btn.active{color:var(--orange);border-bottom-color:var(--orange)}
+.sidebar-head{padding:12px 14px 10px;border-bottom:1px solid var(--border)}
+.sidebar-label{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
+.sidebar-search{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text);font-size:12px;font-family:'Plus Jakarta Sans',sans-serif;width:100%;outline:none;transition:border-color 0.15s}
+.sidebar-search:focus{border-color:var(--orange)}
+.sidebar-search::placeholder{color:var(--text3)}
+.sidebar-scroll{flex:1;overflow-y:auto;padding:6px 0}
+.sidebar-panel{display:none;flex:1;flex-direction:column;overflow:hidden}
+.sidebar-panel.active{display:flex}
+
+/* Days list */
+.day-item{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-left:3px solid transparent;transition:all 0.15s}
+.day-item:hover{background:var(--bg3);border-left-color:var(--border2)}
+.day-item.active{background:var(--od);border-left-color:var(--orange)}
+.day-avatar{width:36px;height:36px;border-radius:9px;background:var(--bg4);display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;border:1px solid var(--border);font-family:'Space Grotesk',sans-serif;font-weight:700;transition:all 0.15s}
+.day-item.active .day-avatar{background:var(--og);border-color:rgba(255,107,43,0.35)}
+.day-av-num{font-size:14px;line-height:1;color:var(--text)}
+.day-item.active .day-av-num{color:var(--orange)}
+.day-av-sub{font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--text3);text-transform:uppercase;margin-top:1px}
+.day-meta{flex:1;min-width:0}
+.day-date{font-size:12px;font-weight:600;color:var(--text);line-height:1.3}
+.day-loc{font-size:11px;color:var(--text2);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.day-prog{display:flex;align-items:center;gap:5px;margin-top:5px}
+.day-actions{display:flex;align-items:center;gap:6px;opacity:0;transition:opacity 0.15s}
+.day-item:hover .day-actions,.day-item.active .day-actions{opacity:1}
+.day-action-btn{width:26px;height:26px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.15s}
+.day-action-btn:hover{background:var(--bg4);color:var(--text)}
+.day-action-btn.del:hover{background:var(--rd);border-color:rgba(248,81,73,0.35);color:var(--red)}
+.mini-bar{flex:1;height:3px;background:var(--bg4);border-radius:2px;overflow:hidden}
+.mini-fill{height:100%;border-radius:2px;transition:width 0.4s}
+.mini-pct{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);min-width:24px;text-align:right}
+.sidebar-footer{padding:12px 14px;border-top:1px solid var(--border)}
+.add-day-btn{width:100%;background:transparent;border:1.5px dashed var(--border2);color:var(--text2);padding:9px;border-radius:9px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:12px;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;justify-content:center;gap:6px}
+.add-day-btn:hover{border-color:var(--orange);color:var(--orange);background:var(--od)}
+
+/* Discussion sidebar list */
+.disc-sidebar-item{padding:10px 14px;cursor:pointer;border-left:3px solid transparent;transition:all 0.15s;border-bottom:1px solid rgba(255,255,255,0.03)}
+.disc-sidebar-item:hover{background:var(--bg3);border-left-color:var(--border2)}
+.disc-sidebar-item.active{background:var(--pd);border-left-color:var(--purple)}
+.disc-si-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.disc-si-num{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);background:var(--bg4);padding:1px 6px;border-radius:4px;flex-shrink:0}
+.disc-item.active .disc-si-num{color:var(--purple)}
+.disc-si-title{font-size:12px;font-weight:600;color:var(--text);line-height:1.4;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.disc-si-status{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:500;padding:2px 7px;border-radius:8px;flex-shrink:0}
+.dss-done{background:var(--ld);color:var(--lime)}
+.dss-prog{background:var(--ad);color:var(--amber)}
+.dss-pend{background:rgba(72,79,88,0.3);color:var(--text3)}
+.dss-disc{background:var(--bd);color:var(--blue)}
+
+/* ── MAIN ── */
+.main{flex:1;overflow-y:auto;padding:24px 28px;background:var(--bg)}
+
+/* ── DAY HEADER ── */
+.day-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px}
+.day-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:28px;letter-spacing:-0.5px;line-height:1;display:flex;align-items:baseline;gap:8px}
+.day-title-n{color:var(--orange)}
+.day-meta-row{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);background:var(--bg2);border:1px solid var(--border);padding:3px 9px;border-radius:20px}
+.chip svg{width:11px;height:11px;opacity:0.7;flex-shrink:0}
+.score-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 20px;text-align:center;min-width:130px;position:relative;overflow:hidden}
+.score-card::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,var(--og),transparent 60%);pointer-events:none}
+.score-big{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:34px;line-height:1;color:var(--lime)}
+.score-denom{font-size:16px;color:var(--text3);font-weight:400}
+.score-sub{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text2);margin-top:4px}
+.score-pbar{height:3px;background:var(--bg3);border-radius:2px;margin-top:8px;overflow:hidden}
+.score-pfill{height:100%;border-radius:2px;background:var(--lime);transition:width 0.5s}
+
+/* ── SUMMARY CARDS ── */
+.sum-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.s-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;display:flex;align-items:center;gap:10px;transition:border-color 0.15s}
+.s-card:hover{border-color:var(--border2)}
+.s-ico{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.s-ico.g{background:var(--ld)}.s-ico.o{background:var(--od)}.s-ico.a{background:var(--ad)}.s-ico.b{background:var(--bd)}
+.s-val{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;line-height:1}
+.s-val.g{color:var(--lime)}.s-val.o{color:var(--orange)}.s-val.a{color:var(--amber)}.s-val.b{color:var(--blue)}
+.s-lbl{font-size:10px;color:var(--text2);margin-top:2px;font-weight:500}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:2px;margin-bottom:18px;background:var(--bg2);border:1px solid var(--border);padding:4px;border-radius:10px;width:fit-content}
+.tab-btn{background:transparent;border:none;padding:7px 16px;border-radius:7px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:12px;color:var(--text2);cursor:pointer;transition:all 0.15s}
+.tab-btn:hover{color:var(--text);background:var(--bg3)}
+.tab-btn.active{background:var(--bg4);color:var(--text)}
+.tab-content{display:none}.tab-content.active{display:block}
+
+/* ── CHECKLIST SECTION ── */
+.cl-section{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:12px;overflow:hidden;transition:border-color 0.15s}
+.cl-section:hover{border-color:var(--border2)}
+.cl-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer;user-select:none;transition:background 0.12s}
+.cl-head:hover{background:rgba(255,255,255,0.02)}
+.cl-head-l{display:flex;align-items:center;gap:10px}
+.cl-ico{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.cl-ico.f{background:var(--od)}.cl-ico.r{background:var(--ld)}.cl-ico.fw{background:var(--ad)}
+.cl-name{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px}
+.cl-cnt{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2);background:var(--bg3);padding:2px 7px;border-radius:10px;border:1px solid var(--border)}
+.cl-right{display:flex;align-items:center;gap:10px}
+.cl-toolbar{display:flex;justify-content:flex-end;margin-bottom:12px}
+.cl-toolbar-btn{font-family:'JetBrains Mono',monospace;font-size:10px;background:transparent;border:1px solid var(--border2);color:var(--text2);padding:6px 10px;border-radius:7px;cursor:pointer;transition:all 0.15s}
+.cl-toolbar-btn:hover{border-color:var(--orange);color:var(--orange);background:var(--od)}
+.cl-edit-btn{font-family:'JetBrains Mono',monospace;font-size:10px;background:transparent;border:1px solid var(--border2);color:var(--text2);padding:4px 9px;border-radius:6px;cursor:pointer;transition:all 0.15s}
+.cl-edit-btn:hover{border-color:var(--orange);color:var(--orange);background:var(--od)}
+.cl-add-btn{font-family:'JetBrains Mono',monospace;font-size:10px;background:transparent;border:1px solid var(--border2);color:var(--text2);padding:4px 9px;border-radius:6px;cursor:pointer;transition:all 0.15s}
+.cl-add-btn:hover{border-color:var(--orange);color:var(--orange);background:var(--od)}
+.cl-delete-btn{font-family:'JetBrains Mono',monospace;font-size:10px;background:transparent;border:1px solid rgba(248,81,73,0.22);color:var(--text3);padding:4px 9px;border-radius:6px;cursor:pointer;transition:all 0.15s}
+.cl-delete-btn:hover{background:var(--rd);border-color:rgba(248,81,73,0.35);color:var(--red)}
+.cl-pbar{width:100px;height:5px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.cl-pfill{height:100%;border-radius:3px;transition:width 0.4s}
+.cl-pfill.f{background:var(--orange)}.cl-pfill.r{background:var(--lime)}.cl-pfill.fw{background:var(--amber)}.cl-pfill.cust{background:var(--blue)}
+.cl-pct{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);min-width:28px;text-align:right}
+.cl-chev{color:var(--text3);font-size:11px;transition:transform 0.2s}.cl-chev.open{transform:rotate(90deg)}
+.cl-body{border-top:1px solid var(--border)}
+.cl-empty{padding:14px 16px;color:var(--text3);font-size:12px}
+
+/* ── CHECK ITEM ── */
+.ci{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.03);transition:background 0.12s}
+.ci:last-child{border-bottom:none}
+.ci:hover{background:rgba(255,255,255,0.02)}
+.ci.ck{background:rgba(57,211,83,0.04)}.ci.na{opacity:0.42}
+.checkbox{width:20px;height:20px;border-radius:5px;border:1.5px solid var(--bg4);cursor:pointer;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;transition:all 0.18s;background:transparent}
+.checkbox:hover{border-color:var(--lime);background:var(--ld)}
+.checkbox.ck{background:var(--lime);border-color:var(--lime)}
+.checkbox.ck::after{content:'';width:11px;height:7px;border-left:2px solid #0D1117;border-bottom:2px solid #0D1117;transform:rotate(-45deg) translateY(-1px);display:block}
+.ci-body{flex:1;min-width:0}
+.ci-top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.ci-lbl{font-size:13px;font-weight:500;color:var(--text);line-height:1.5}
+.ci.ck .ci-lbl{text-decoration:line-through;color:var(--text3)}
+.pts{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--lime);background:var(--ld);padding:1px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0}
+.ci-edit{font-family:'JetBrains Mono',monospace;font-size:10px;background:transparent;border:1px solid var(--border2);color:var(--text2);padding:4px 8px;border-radius:6px;cursor:pointer;transition:all 0.15s;flex-shrink:0}
+.ci-edit:hover{border-color:var(--orange);color:var(--orange);background:var(--od)}
+.ci-del{font-family:'JetBrains Mono',monospace;font-size:10px;background:transparent;border:1px solid rgba(248,81,73,0.22);color:var(--text3);padding:4px 8px;border-radius:6px;cursor:pointer;transition:all 0.15s;flex-shrink:0}
+.ci-del:hover{background:var(--rd);border-color:rgba(248,81,73,0.35);color:var(--red)}
+.ci-hist{font-size:10px;color:var(--text3);margin-top:3px;font-family:'JetBrains Mono',monospace}
+.ci-bottom{display:flex;align-items:center;gap:7px;margin-top:8px}
+.remark{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:6px 11px;font-size:12px;color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;outline:none;transition:border-color 0.15s}
+.remark::placeholder{color:var(--text3)}.remark:focus{border-color:var(--orange)}
+.na-btn{font-family:'JetBrains Mono',monospace;font-size:10px;background:transparent;border:1px solid var(--border2);color:var(--text2);padding:4px 9px;border-radius:5px;cursor:pointer;transition:all 0.15s;flex-shrink:0}
+.na-btn:hover{border-color:var(--amber);color:var(--amber)}
+.na-btn.on{background:var(--ad);border-color:var(--amber);color:var(--amber)}
+
+/* ── MEDIA ── */
+.media-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:18px}
+.media-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.media-ttl{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px}
+.media-dot{width:6px;height:6px;background:var(--orange);border-radius:50%}
+.media-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.media-select{min-width:220px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;outline:none}
+.media-select:focus{border-color:var(--orange)}
+.media-help{font-size:11px;color:var(--text2)}
+.media-groups{display:flex;flex-direction:column;gap:16px}
+.media-group{background:rgba(255,255,255,0.01);border:1px solid var(--border);border-radius:12px;padding:14px}
+.media-group-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.media-group-title{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px}
+.media-group-count{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2);background:var(--bg3);border:1px solid var(--border);padding:2px 8px;border-radius:20px}
+.media-grid{display:flex;gap:10px;flex-wrap:wrap}
+.media-action-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.media-thumb{width:100px;height:80px;border-radius:9px;background:var(--bg3);border:1px solid var(--border);cursor:pointer;position:relative;overflow:hidden;transition:all 0.15s}
+.media-thumb:hover{border-color:var(--border2);transform:scale(1.03)}
+.media-thumb img,.media-thumb video{width:100%;height:100%;object-fit:cover}
+.media-meta{position:absolute;left:0;right:0;bottom:0;padding:6px 7px;background:linear-gradient(180deg,transparent,rgba(0,0,0,0.78));font-size:9px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rm{position:absolute;top:5px;right:5px;background:rgba(0,0,0,0.75);border:none;color:white;width:20px;height:20px;border-radius:50%;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.15s}
+.media-thumb:hover .rm{opacity:1}
+.media-add{width:100px;height:80px;border-radius:9px;background:transparent;border:1.5px dashed var(--border2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;cursor:pointer;transition:all 0.15s;color:var(--text2);font-size:11px;font-weight:600}
+.media-add:hover{border-color:var(--orange);color:var(--orange);background:var(--od)}
+.media-add svg{width:18px;height:18px}
+.media-add.camera-add{border-style:solid}
+.media-empty{padding:18px 10px;text-align:center;color:var(--text3);font-size:12px}
+#fi{display:none}
+
+/* ── HISTORY TABLE ── */
+.hist-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden}
+.hist-hd{padding:14px 18px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.hist-ttl{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px}
+.hist-cnt{font-family:'JetBrains Mono',monospace;font-size:10px;background:var(--bg3);border:1px solid var(--border);padding:2px 7px;border-radius:10px;color:var(--text2)}
+.ht{width:100%;border-collapse:collapse}
+.ht th{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:left;padding:10px 16px;border-bottom:1px solid var(--border);background:rgba(255,255,255,0.015)}
+.ht td{font-size:12px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.03);color:var(--text);vertical-align:middle}
+.ht tr:last-child td{border-bottom:none}
+.ht tr:hover td{background:rgba(255,255,255,0.02)}
+.pill{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;padding:3px 9px;border-radius:20px}
+.pill.done{background:var(--ld);color:var(--lime)}.pill.partial{background:var(--ad);color:var(--amber)}.pill.pending{background:rgba(72,79,88,0.3);color:var(--text3)}
+
+/* ── DISCUSSION VIEW ── */
+.disc-page-header{margin-bottom:20px}
+.disc-page-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:26px;letter-spacing:-0.5px;display:flex;align-items:center;gap:12px}
+.disc-page-icon{width:36px;height:36px;border-radius:10px;background:var(--pd);display:flex;align-items:center;justify-content:center;font-size:18px}
+.disc-page-sub{font-size:13px;color:var(--text2);margin-top:6px}
+.disc-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+
+.disc-filter-row{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.filter-btn{background:transparent;border:1px solid var(--border2);color:var(--text2);padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;transition:all 0.15s;font-family:'Plus Jakarta Sans',sans-serif}
+.filter-btn:hover{border-color:var(--purple);color:var(--purple)}
+.filter-btn.active{background:var(--pd);border-color:var(--purple);color:var(--purple)}
+
+/* Discussion card */
+.disc-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:10px;overflow:hidden;transition:all 0.15s}
+.disc-card:hover{border-color:var(--border2)}
+.disc-card.expanded{border-color:var(--purple)}
+.disc-card-head{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;cursor:pointer;transition:background 0.12s}
+.disc-card-head:hover{background:rgba(255,255,255,0.02)}
+.disc-num-badge{width:28px;height:28px;border-radius:7px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;color:var(--text2);flex-shrink:0;margin-top:1px}
+.disc-card.expanded .disc-num-badge{background:var(--pd);border-color:rgba(188,140,255,0.3);color:var(--purple)}
+.disc-head-body{flex:1;min-width:0}
+.disc-head-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.disc-title{font-size:14px;font-weight:600;color:var(--text);line-height:1.4;flex:1}
+.disc-status-badge{flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:500;padding:3px 9px;border-radius:20px;cursor:pointer;transition:all 0.15s;border:none}
+.disc-status-badge:hover{opacity:0.8}
+.ds-done{background:var(--ld);color:var(--lime)}
+.ds-prog{background:var(--ad);color:var(--amber)}
+.ds-pend{background:rgba(72,79,88,0.3);color:var(--text3)}
+.ds-disc{background:var(--bd);color:var(--blue)}
+.disc-preview{font-size:12px;color:var(--text2);margin-top:4px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.disc-meta{display:flex;align-items:center;gap:10px;margin-top:6px}
+.disc-meta-chip{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);display:flex;align-items:center;gap:4px}
+.disc-chev{color:var(--text3);font-size:11px;transition:transform 0.2s;flex-shrink:0;margin-top:4px}
+.disc-chev.open{transform:rotate(90deg)}
+
+.disc-body{border-top:1px solid var(--border);padding:16px;display:none;animation:fadeIn 0.15s ease}
+.disc-body.open{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+
+.disc-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.disc-detail-block{background:var(--bg3);border-radius:8px;padding:11px 13px}
+.disc-detail-label{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:5px}
+.disc-detail-val{font-size:13px;color:var(--text);line-height:1.5}
+.disc-detail-val.full{grid-column:1/-1}
+
+.disc-action-row{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.status-select{background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;outline:none;cursor:pointer}
+.status-select:focus{border-color:var(--purple)}
+
+.disc-comments{margin-top:14px}
+.disc-comments-label{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+.comment-item{display:flex;gap:10px;margin-bottom:10px}
+.comment-avatar{width:28px;height:28px;border-radius:7px;background:var(--og);border:1px solid rgba(255,107,43,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--orange)}
+.comment-bubble{flex:1;background:var(--bg3);border-radius:8px;border:1px solid var(--border);padding:9px 12px}
+.comment-bubble-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.comment-author{font-size:11px;font-weight:600;color:var(--text)}
+.comment-time{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3)}
+.comment-text{font-size:12px;color:var(--text2);line-height:1.5}
+.comment-input-row{display:flex;gap:8px;margin-top:10px}
+.comment-input{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;outline:none;transition:border-color 0.15s}
+.comment-input::placeholder{color:var(--text3)}.comment-input:focus{border-color:var(--purple)}
+
+/* subtasks within discussion */
+.disc-subtasks{margin-top:14px}
+.disc-subtask-label{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
+.subtask-item{display:flex;align-items:center;gap:9px;padding:7px 10px;background:var(--bg3);border-radius:7px;margin-bottom:5px;border:1px solid var(--border)}
+.subtask-cb{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--bg4);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.15s;background:transparent}
+.subtask-cb:hover{border-color:var(--lime)}
+.subtask-cb.ck{background:var(--lime);border-color:var(--lime)}
+.subtask-cb.ck::after{content:'';width:8px;height:5px;border-left:1.5px solid #0D1117;border-bottom:1.5px solid #0D1117;transform:rotate(-45deg) translateY(-1px);display:block}
+.subtask-text{font-size:12px;color:var(--text);flex:1;line-height:1.4}
+.subtask-cb.ck ~ .subtask-text{text-decoration:line-through;color:var(--text3)}
+
+/* ── ADD DISCUSSION MODAL ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:200;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:24px;width:500px;max-width:95vw;max-height:90vh;overflow-y:auto}
+.modal-ttl{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;color:var(--text);margin-bottom:18px;display:flex;align-items:center;gap:10px}
+.modal-ico{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.modal label{font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:5px;letter-spacing:0.5px;text-transform:uppercase}
+.modal input,.modal select,.modal textarea{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;margin-bottom:14px;outline:none;transition:border-color 0.15s}
+.modal input:focus,.modal select:focus,.modal textarea:focus{border-color:var(--purple)}
+.modal input::placeholder,.modal textarea::placeholder{color:var(--text3)}
+.modal-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+
+/* ── CAMERA MODAL ── */
+#cameraModal .modal{width:680px;max-width:96vw}
+.camera-preview{background:#0B0F14;border:1px solid var(--border);border-radius:14px;overflow:hidden;position:relative;margin-bottom:14px;min-height:320px;display:flex;align-items:center;justify-content:center}
+.camera-preview video{display:block;width:100%;max-height:62vh;object-fit:cover;background:#0B0F14}
+.camera-empty{padding:28px;text-align:center;color:var(--text2);font-size:13px;line-height:1.6}
+.camera-help{font-size:11px;color:var(--text2);margin:-4px 0 14px}
+
+/* ── ADD DAY MODAL uses orange ── */
+#addDayModal .modal input:focus,#addDayModal .modal textarea:focus{border-color:var(--orange)}
+#addDayModal .modal-ico{background:var(--od)}
+
+/* ── LIGHTBOX ── */
+.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.93);z-index:300;align-items:center;justify-content:center}
+.lightbox.open{display:flex}
+.lightbox img{max-width:90vw;max-height:90vh;border-radius:10px}
+.lb-close{position:absolute;top:20px;right:20px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:white;width:38px;height:38px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.15s}
+.lb-close:hover{background:rgba(255,255,255,0.2)}
+
+/* ── EMPTY ── */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:14px;text-align:center}
+.empty-ico{width:64px;height:64px;border-radius:16px;background:var(--bg2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:4px}
+.empty h3{font-family:'Space Grotesk',sans-serif;font-size:16px;color:var(--text);font-weight:600}
+.empty p{font-size:13px;color:var(--text2);max-width:260px;line-height:1.6}
+
+@media(max-width:700px){
+  .sidebar{width:62px}
+  .day-meta,.sidebar-label,.sidebar-search,.snav-btn span{display:none}
+  .snav-btn{font-size:8px}
+  .sidebar-head{padding:10px}
+  .sum-row,.disc-stats{grid-template-columns:1fr 1fr}
+  .main{padding:14px}
+  .disc-detail-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-icon">📋</div>
+    <div class="logo-text">Daily<em>Tracker</em></div>
+  </div>
+  <div class="topbar-center" id="todayLabel"></div>
+  <div class="topbar-right">
+    <button class="btn btn-ghost" id="topAddBtn" onclick="handleTopAdd()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span id="topAddLabel">New Day</span>
+    </button>
+    <button class="btn btn-orange" onclick="exportAll()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Export
+    </button>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-nav">
+      <button class="snav-btn active" onclick="switchSideView('days',this)" id="snav-days">📅 <span>Days</span></button>
+      <button class="snav-btn" onclick="switchSideView('disc',this)" id="snav-disc">💬 <span>Discussions</span></button>
+    </div>
+
+    <!-- Days Panel -->
+    <div class="sidebar-panel active" id="panel-days">
+      <div class="sidebar-head">
+        <div class="sidebar-label">Inspection Log</div>
+        <input class="sidebar-search" type="text" placeholder="🔍  Search days..." oninput="filterSidebar(this.value)">
+      </div>
+      <div class="sidebar-scroll" id="dayList"></div>
+      <div class="sidebar-footer">
+        <button class="add-day-btn" onclick="openAddDayModal()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Inspection Day
+        </button>
+      </div>
+    </div>
+
+    <!-- Discussions Panel -->
+    <div class="sidebar-panel" id="panel-disc">
+      <div class="sidebar-head">
+        <div class="sidebar-label">Discussion Items</div>
+        <input class="sidebar-search" type="text" placeholder="🔍  Search topics..." oninput="filterDiscSidebar(this.value)" id="discSideSearch">
+      </div>
+      <div class="sidebar-scroll" id="discList"></div>
+      <div class="sidebar-footer">
+        <button class="add-day-btn" onclick="openAddDiscModal()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Discussion Item
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main" id="mainContent">
+    <div class="empty">
+      <div class="empty-ico">🏗️</div>
+      <h3>No day selected</h3>
+      <p>Add your first inspection day to start tracking site progress.</p>
+      <button class="btn btn-orange" onclick="openAddDayModal()" style="margin-top:4px">+ Add First Day</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD DAY MODAL -->
+<div class="modal-overlay" id="addDayModal">
+  <div class="modal">
+    <div class="modal-ttl" id="dayModalTitle"><div class="modal-ico">📅</div>Add Inspection Day</div>
+    <div class="modal-row">
+      <div><label>Date</label><input type="date" id="nd-date"></div>
+      <div><label>Inspector Name</label><input type="text" id="nd-insp" placeholder="e.g. Ravi Kumar"></div>
+    </div>
+    <label>Site / Location</label>
+    <input type="text" id="nd-loc" placeholder="e.g. Block A – Grid 4-7">
+    <label>Pre-inspection Notes</label>
+    <textarea id="nd-notes" rows="2" placeholder="Any observations before starting..."></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('addDayModal')">Cancel</button>
+      <button class="btn btn-orange" id="dayModalAction" onclick="saveDay()">Create Day →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD DISCUSSION MODAL -->
+<div class="modal-overlay" id="addDiscModal">
+  <div class="modal">
+    <div class="modal-ttl"><div class="modal-ico" style="background:var(--pd)">💬</div>Add Discussion Item</div>
+    <label>Topic / Title</label>
+    <input type="text" id="di-title" placeholder="e.g. Concrete patch work – Block B">
+    <div class="modal-row">
+      <div>
+        <label>Status</label>
+        <select id="di-status">
+          <option value="pending">Pending</option>
+          <option value="in-progress">In Progress</option>
+          <option value="done">Done</option>
+          <option value="discussion">For Discussion</option>
+        </select>
+      </div>
+      <div>
+        <label>Assigned To</label>
+        <input type="text" id="di-assign" placeholder="e.g. GilGil, Lorenzo">
+      </div>
+    </div>
+    <label>Notes / Details</label>
+    <textarea id="di-notes" rows="3" placeholder="Describe the discussion item, decisions made, next steps..."></textarea>
+    <label>Sub-tasks (one per line)</label>
+    <textarea id="di-subtasks" rows="3" placeholder="e.g. Take sewer line photos&#10;Confirm gas line drawing&#10;Submit permit"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('addDiscModal')">Cancel</button>
+      <button class="btn btn-orange" style="background:linear-gradient(135deg,var(--purple),#9B6FD4)" onclick="addDiscItem()">Add Item →</button>
+    </div>
+  </div>
+</div>
+
+<!-- CAMERA MODAL -->
+<div class="modal-overlay" id="cameraModal" onclick="closeCameraModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-ttl"><div class="modal-ico" style="background:var(--bd)">📷</div>Capture Site Photo</div>
+    <div class="camera-help">Camera photo will be saved directly into the selected media category for this day.</div>
+    <div class="camera-preview">
+      <video id="cameraVideo" autoplay playsinline muted></video>
+      <div class="camera-empty" id="cameraFallbackText">Allow camera access to capture a photo here.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeCameraModal()">Cancel</button>
+      <button class="btn btn-orange" id="cameraCaptureBtn" onclick="captureCameraPhoto()">Capture & Upload</button>
+    </div>
+  </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lb-close" onclick="closeLightbox()">✕</button>
+  <img id="lbImg" src="" alt="">
+</div>
+<input type="file" id="fi" accept="image/*,video/*" multiple onchange="handleUpload(event)">
+
+<script>
+// ── CHECKLIST DATA ──
+const CL={
+  foundation:{label:"Foundation Work",icon:"🏛️",cls:"f",items:[
+    {id:"f1",text:"Excavation depth & dimensions verified per drawing",pts:10},
+    {id:"f2",text:"Soil bearing capacity assessed / documented",pts:8},
+    {id:"f3",text:"Bottom of excavation leveled and compacted",pts:8},
+    {id:"f4",text:"Dewatering measures in place (if required)",pts:6},
+    {id:"f5",text:"Anti-termite / waterproofing treatment applied",pts:6},
+    {id:"f6",text:"PCC (Plain Cement Concrete) mix ratio correct",pts:10},
+    {id:"f7",text:"PCC thickness meets spec (min 75mm)",pts:8},
+    {id:"f8",text:"Foundation width & depth as per structural drawing",pts:10},
+    {id:"f9",text:"No debris / loose material in excavation",pts:5},
+    {id:"f10",text:"Safety / shoring in place for deep excavation",pts:7},
+  ]},
+  rebar:{label:"Rebar Work",icon:"🔩",cls:"r",items:[
+    {id:"r1",text:"Rebar diameter matches structural drawing spec",pts:10},
+    {id:"r2",text:"Rebar spacing correct (both ways)",pts:10},
+    {id:"r3",text:"Cover blocks / spacers installed (min 40mm cover)",pts:8},
+    {id:"r4",text:"Lap length per code (40D min for tension bars)",pts:8},
+    {id:"r5",text:"Starter bars aligned and secured",pts:8},
+    {id:"r6",text:"No rusted / damaged bars without approval",pts:7},
+    {id:"r7",text:"Hooks / bends at correct angle (135° for stirrups)",pts:7},
+    {id:"r8",text:"Stirrup spacing matches drawing",pts:8},
+    {id:"r9",text:"All bar intersections tied with binding wire",pts:6},
+    {id:"r10",text:"No unauthorized substitutions of bar grade/size",pts:8},
+  ]},
+  formwork:{label:"Form Work",icon:"🪵",cls:"fw",items:[
+    {id:"fw1",text:"Formwork plumb and level (checked with spirit level)",pts:10},
+    {id:"fw2",text:"Formwork dimensions match drawing (width/height)",pts:10},
+    {id:"fw3",text:"Form panels properly oiled / release agent applied",pts:6},
+    {id:"fw4",text:"Joints sealed to prevent cement slurry leakage",pts:7},
+    {id:"fw5",text:"Adequate lateral bracing & props installed",pts:8},
+    {id:"fw6",text:"Prop spacing & load-bearing capacity verified",pts:8},
+    {id:"fw7",text:"Openings / cutouts correctly positioned",pts:7},
+    {id:"fw8",text:"Access holes for concrete vibrator provided",pts:5},
+    {id:"fw9",text:"No cracks or damaged panels used",pts:7},
+    {id:"fw10",text:"Pre-pour checklist signed off by site engineer",pts:10},
+  ]}
+};
+
+// ── DISCUSSION SEED DATA (Discussion 03/25) ──
+const DISC_SEED = [
+  {id:"d1",num:1,title:"Concrete – 4 inch x 2 inch patch",status:"in-progress",assignedTo:"GilGil",notes:"GilGil said he will do gas line work as per drawing. This includes sewer line and water line.",subtasks:[{id:"st1",text:"Gas line work as per drawing",done:false},{id:"st2",text:"Sewer line coordination",done:false},{id:"st3",text:"Water line coordination",done:false}],comments:[],date:"03/25"},
+  {id:"d2",num:2,title:"Sewer line photos",status:"done",assignedTo:"",notes:"Sewer line photos taken and documented.",subtasks:[],comments:[],date:"03/25"},
+  {id:"d3",num:3,title:"Sewer line, water line, and gas line",status:"done",assignedTo:"",notes:"All three utility lines coordinated and confirmed.",subtasks:[],comments:[],date:"03/25"},
+  {id:"d4",num:4,title:"HVAC end-to-end work schedule",status:"done",assignedTo:"",notes:"Ducts are installed. Copper piping done. Wiring done. Machine payment: 10k + 10k for installation. Ready for inspection.",subtasks:[{id:"st4",text:"Ducts installed",done:true},{id:"st5",text:"Copper piping done",done:true},{id:"st6",text:"Wiring done",done:true},{id:"st7",text:"Machine payment – 10k + 10k for installation",done:true},{id:"st8",text:"Schedule inspection",done:false}],comments:[],date:"03/25"},
+  {id:"d5",num:5,title:"T24 – QII Confirmation",status:"done",assignedTo:"",notes:"T24 QII confirmed.",subtasks:[],comments:[],date:"03/25"},
+  {id:"d6",num:6,title:"Bill – time for submission",status:"in-progress",assignedTo:"",notes:"Two to three weeks lead time for bill submission.",subtasks:[],comments:[],date:"03/25"},
+  {id:"d7",num:7,title:"Swimming pool project (track separately)",status:"done",assignedTo:"",notes:"Confirmed for Monday. To be tracked as a separate project.",subtasks:[],comments:[],date:"03/25"},
+  {id:"d8",num:8,title:"Swimming pool – create separate checklist / project milestones",status:"in-progress",assignedTo:"",notes:"Full milestone breakdown created for the swimming pool project.",subtasks:[
+    {id:"st10",text:"Initial Deposit – Contract signing",done:false},
+    {id:"st11",text:"Design, Engineering & Permit Submission",done:false},
+    {id:"st12",text:"Excavation Completed",done:false},
+    {id:"st13",text:"Pool Layout, Leveling & Formwork Preparation",done:false},
+    {id:"st14",text:"Rebar Installation (floor, walls, steps, benches, bond beam)",done:false},
+    {id:"st15",text:"Plumbing Completed",done:false},
+    {id:"st16",text:"Gunite Applied (entire pool shell)",done:false},
+    {id:"st17",text:"Tile Installation (pool perimeter)",done:false},
+    {id:"st18",text:"Coping Installation (travertine around pool)",done:false},
+    {id:"st19",text:"Equipment Installation",done:false},
+    {id:"st20",text:"Pool Cover Ordered",done:false},
+    {id:"st21",text:"Pebble Finish Applied",done:false},
+    {id:"st22",text:"Pool Cover Installed",done:false},
+    {id:"st23",text:"Project Completion & Final Balance",done:false},
+  ],comments:[],date:"03/25"},
+  {id:"d9",num:9,title:"PGE Scope for excavation – Gas and Electric",status:"done",assignedTo:"",notes:"PGE scope confirmed for gas and electric excavation.",subtasks:[],comments:[],date:"03/25"},
+  {id:"d10",num:10,title:"Densglass installation",status:"done",assignedTo:"Flavio",notes:"Confirmation received from Flavio.",subtasks:[],comments:[],date:"03/25"},
+  {id:"d11",num:11,title:"Create web app for Dan – daily progress and checklist",status:"in-progress",assignedTo:"",notes:"Web app to store daily progress and maintain checklist. Currently in progress.",subtasks:[],comments:[],date:"03/25"},
+  {id:"d12",num:12,title:"Schedule Inspection – Densglass – Underlayment",status:"done",assignedTo:"",notes:"Scheduled for Tuesday (latest available).",subtasks:[],comments:[],date:"03/25"},
+  {id:"d13",num:13,title:"Utility Dashboard",status:"done",assignedTo:"",notes:"Utility dashboard completed.",subtasks:[],comments:[],date:"03/25"},
+  {id:"d14",num:14,title:"Roofing work timeline",status:"done",assignedTo:"Lorenzo",notes:"Lorenzo agreed to complete underlayment by Tuesday.",subtasks:[],comments:[],date:"03/25"},
+  {id:"d15",num:15,title:"Washing Machine in ADU (Refrigerator)",status:"pending",assignedTo:"",notes:"For discussion.",subtasks:[],comments:[],date:"03/25"},
+];
+
+// ── STATE ──
+const query = new URLSearchParams(window.location.search);
+const EMBED_PARAMS = (window.__TRACKER_EMBED_PARAMS__ && typeof window.__TRACKER_EMBED_PARAMS__ === 'object')
+  ? window.__TRACKER_EMBED_PARAMS__
+  : {};
+const PROJECT_ID = query.get('projectId') || EMBED_PARAMS.projectId || 'standalone';
+const BACKEND_URL_PARAM = query.get('backendUrl') || EMBED_PARAMS.backendUrl || '';
+const LEGACY_OWNER_KEY = 'dt_legacy_owner_project_v1';
+const scopedKey = key => `${key}__${PROJECT_ID}`;
+const clone = value => JSON.parse(JSON.stringify(value));
+
+function parseStore(raw, fallback){
+  if(raw === null || raw === undefined || raw === '') return fallback;
+  try { return JSON.parse(raw); } catch { return fallback; }
+}
+
+function getParentProject(){
+  try{
+    if(window.parent && window.parent !== window && typeof window.parent.proj === 'function'){
+      const project = window.parent.proj();
+      if(project && project.id === PROJECT_ID) return project;
+    }
+  }catch(_err){}
+  return null;
+}
+
+function getParentTrackerState(){
+  const project = getParentProject();
+  if(!project || !project.dailyTracker || typeof project.dailyTracker !== 'object') return null;
+  return clone(project.dailyTracker);
+}
+
+function saveParentTrackerState(){
+  const project = getParentProject();
+  if(!project) return false;
+  project.dailyTracker = {
+    days: clone(days),
+    discItems: clone(discItems),
+    updatedAt: new Date().toISOString()
+  };
+  try{
+    if(typeof window.parent.saveDB === 'function'){
+      window.parent.saveDB();
+      return true;
+    }
+  }catch(_err){}
+  return false;
+}
+
+function normalizeApiBase(url){
+  const clean = String(url || '').trim().replace(/\/+$/,'');
+  if(!clean) return '';
+  return /\/api$/i.test(clean) ? clean : clean + '/api';
+}
+
+function getParentBackendBase(){
+  try{
+    if(window.parent && window.parent !== window){
+      if(typeof window.parent.initSupabaseClient === 'function'){
+        const client = window.parent.initSupabaseClient();
+        if(client && client.baseUrl) return normalizeApiBase(client.baseUrl);
+      }
+      if(typeof window.parent.getSupabaseConfig === 'function'){
+        return normalizeApiBase(window.parent.getSupabaseConfig()?.url || '');
+      }
+    }
+  }catch(_err){}
+  return '';
+}
+
+function getBackendBaseUrl(){
+  return normalizeApiBase(BACKEND_URL_PARAM) || getParentBackendBase();
+}
+
+function hasBackendAttachmentStorage(){
+  return !!(getBackendBaseUrl() && PROJECT_ID && PROJECT_ID !== 'standalone');
+}
+
+function attachmentDownloadUrl(attachmentId){
+  const baseUrl = getBackendBaseUrl();
+  if(!baseUrl || !attachmentId) return '';
+  return `${baseUrl}/attachments/${encodeURIComponent(attachmentId)}/download`;
+}
+
+function mediaSrc(item){
+  if(!item) return '';
+  if(item.data) return item.data;
+  if(item.url) return item.url;
+  if(item.attachmentId) return attachmentDownloadUrl(item.attachmentId);
+  return '';
+}
+
+function mediaType(item){
+  return String(item?.contentType || item?.type || 'application/octet-stream');
+}
+
+function isImageMedia(item){
+  return /^image\//i.test(mediaType(item));
+}
+
+function isVideoMedia(item){
+  return /^video\//i.test(mediaType(item));
+}
+
+function mediaStorageHelpText(){
+  return hasBackendAttachmentStorage()
+    ? 'Pictures are uploaded to project storage under the selected checklist category.'
+    : 'Pictures are saved only in this browser until backend storage is configured.';
+}
+
+async function uploadAttachmentFile(file){
+  const baseUrl = getBackendBaseUrl();
+  if(!baseUrl) throw new Error('Missing backend URL.');
+  if(!PROJECT_ID || PROJECT_ID === 'standalone'){
+    throw new Error('Select a project before uploading files.');
+  }
+  const contentType = file.type || 'application/octet-stream';
+  try{
+    const initRes = await fetch(baseUrl + '/attachments/upload-url',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify({
+        projectId:PROJECT_ID,
+        fileName:file.name,
+        contentType,
+        size:file.size
+      })
+    });
+    const initText = await initRes.text();
+    let initData = null;
+    if(initText){
+      try{ initData = JSON.parse(initText); }
+      catch(_err){ initData = initText; }
+    }
+    if(initRes.ok && initData && initData.upload && initData.upload.url){
+      const uploadRes = await fetch(initData.upload.url,{
+        method:initData.upload.method || 'PUT',
+        headers:initData.upload.headers || {},
+        body:file
+      });
+      if(!uploadRes.ok){
+        const uploadText = await uploadRes.text();
+        throw new Error(uploadText || ('Upload failed (' + uploadRes.status + ')'));
+      }
+      return initData.attachment || null;
+    }
+    const initError = initData && initData.error ? String(initData.error) : '';
+    const shouldFallback =
+      initRes.status === 404 ||
+      initRes.status === 405 ||
+      /not configured/i.test(initError);
+    if(!shouldFallback){
+      throw new Error(initError || ('Upload failed (' + initRes.status + ')'));
+    }
+  }catch(initErr){
+    if(!(initErr instanceof TypeError)){
+      const message = String(initErr && initErr.message || '');
+      if(message && !/not configured/i.test(message) && !/404/.test(message) && !/405/.test(message)){
+        throw initErr;
+      }
+    }
+  }
+
+  const form = new FormData();
+  form.append('projectId', PROJECT_ID);
+  form.append('file', file, file.name);
+  const res = await fetch(baseUrl + '/attachments/upload',{method:'POST',body:form});
+  const text = await res.text();
+  let data = null;
+  if(text){
+    try{ data = JSON.parse(text); }
+    catch(_err){ data = text; }
+  }
+  if(!res.ok){
+    throw new Error((data && data.error) || ('Upload failed (' + res.status + ')'));
+  }
+  return data && data.attachment ? data.attachment : null;
+}
+
+async function deleteAttachmentFile(attachmentId){
+  const baseUrl = getBackendBaseUrl();
+  if(!baseUrl || !attachmentId) return;
+  const res = await fetch(baseUrl + '/attachments/' + encodeURIComponent(attachmentId),{
+    method:'DELETE'
+  });
+  if(!res.ok && res.status !== 404){
+    let data = null;
+    try{ data = await res.json(); }catch(_err){}
+    throw new Error((data && data.error) || ('Delete failed (' + res.status + ')'));
+  }
+}
+
+function buildMediaItemFromAttachment(file, attachment, categoryKey, categoryLabel){
+  return {
+    name: attachment?.name || file.name,
+    type: attachment?.contentType || file.type || 'application/octet-stream',
+    contentType: attachment?.contentType || file.type || 'application/octet-stream',
+    size: Number(attachment?.size || file.size || 0),
+    attachmentId: attachment?.id || '',
+    bucket: attachment?.bucket || '',
+    storagePath: attachment?.storagePath || '',
+    uploadedAt: attachment?.createdAt || new Date().toISOString(),
+    categoryKey,
+    categoryLabel
+  };
+}
+
+function buildLocalMediaItem(file, dataUrl, categoryKey, categoryLabel){
+  return {
+    name: file.name,
+    type: file.type || 'application/octet-stream',
+    contentType: file.type || 'application/octet-stream',
+    size: Number(file.size || 0),
+    data: dataUrl,
+    uploadedAt: new Date().toISOString(),
+    categoryKey,
+    categoryLabel
+  };
+}
+
+function fileToDataUrl(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = event => resolve(event.target?.result || '');
+    reader.onerror = () => reject(new Error('Could not read file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function saveMediaFile(day, file, categoryKey, categoryLabel){
+  if(hasBackendAttachmentStorage()){
+    try{
+      const attachment = await uploadAttachmentFile(file);
+      if(attachment && attachment.id){
+        day.media.push(buildMediaItemFromAttachment(file, attachment, categoryKey, categoryLabel));
+        return;
+      }
+    }catch(err){
+      alert((err && err.message ? err.message : 'Upload failed.') + ' The file will be kept only in this browser for now.');
+    }
+  }
+  const dataUrl = await fileToDataUrl(file);
+  day.media.push(buildLocalMediaItem(file, dataUrl, categoryKey, categoryLabel));
+}
+
+function adoptLegacyProjectData(){
+  const owner = localStorage.getItem(LEGACY_OWNER_KEY);
+  const legacyDaysRaw = localStorage.getItem('dt_days');
+  const legacyDiscRaw = localStorage.getItem('dt_disc');
+  if(owner || (!legacyDaysRaw && !legacyDiscRaw)) return;
+
+  if(legacyDaysRaw){
+    localStorage.setItem(scopedKey('dt_days'), legacyDaysRaw);
+  }
+  if(legacyDiscRaw){
+    localStorage.setItem(scopedKey('dt_disc'), legacyDiscRaw);
+  }
+  localStorage.setItem(LEGACY_OWNER_KEY, PROJECT_ID);
+}
+
+adoptLegacyProjectData();
+
+const parentTrackerState = getParentTrackerState();
+const localDays = parseStore(localStorage.getItem(scopedKey('dt_days')), []);
+const localDiscItems = parseStore(
+  localStorage.getItem(scopedKey('dt_disc')),
+  PROJECT_ID === 'standalone' ? clone(DISC_SEED) : []
+);
+let days = Array.isArray(parentTrackerState?.days) ? clone(parentTrackerState.days) : localDays;
+let discItems = Array.isArray(parentTrackerState?.discItems)
+  ? clone(parentTrackerState.discItems)
+  : localDiscItems;
+let curDay = null;
+let editingDayId = null;
+let curDiscId = null;
+let sideView = 'days'; // 'days' | 'disc'
+let discFilter = 'all';
+let expandedDisc = {};
+let currentDayTab = 'tCL';
+let cameraStream = null;
+
+const save = () => {
+  localStorage.setItem(scopedKey('dt_days'),JSON.stringify(days));
+  localStorage.setItem(scopedKey('dt_disc'),JSON.stringify(discItems));
+  saveParentTrackerState();
+};
+if(!parentTrackerState && (days.length || discItems.length)){
+  saveParentTrackerState();
+}
+const getDay = id => days.find(d=>d.id===id);
+const getDisc = id => discItems.find(d=>d.id===id);
+const esc = s => (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+
+// ── SIDEBAR VIEW SWITCHING ──
+function switchSideView(view, btn) {
+  sideView = view;
+  document.querySelectorAll('.snav-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.sidebar-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+view).classList.add('active');
+  // Update topbar add button
+  document.getElementById('topAddLabel').textContent = view==='days'?'New Day':'New Item';
+  if(view==='disc') renderDiscMain();
+  else renderMain();
+}
+
+function handleTopAdd(){
+  if(sideView==='days') openAddDayModal();
+  else openAddDiscModal();
+}
+
+// ── SCORE ──
+function sc(day){
+  let e=0,t=0,c=0,ti=0;
+  getChecklistSections(day).forEach(section=>{getChecklistItems(day,section.key).forEach(i=>{ti++;t+=i.pts;if(day.checks?.[i.id]==='checked'){e+=i.pts;c++}})});
+  return{e,t,c,ti};
+}
+
+// ── DAYS SIDEBAR ──
+function renderSidebar(f=''){
+  const list = document.getElementById('dayList');
+  const fd = days.slice().reverse().filter(d=>!f||d.date.includes(f)||(d.location||'').toLowerCase().includes(f.toLowerCase())||(d.inspector||'').toLowerCase().includes(f.toLowerCase()));
+  if(!fd.length){list.innerHTML=`<div style="padding:20px;text-align:center;font-size:11px;color:var(--text3)">${days.length?'No matches':'No days yet'}</div>`;return}
+  list.innerHTML = fd.map(day=>{
+    const s=sc(day),pct=Math.round((s.c/s.ti)*100);
+    const fc=pct===100?'var(--lime)':pct>0?'var(--amber)':'var(--text3)';
+    const d=new Date(day.date+'T12:00:00');
+    return `<div class="day-item${day.id===curDay?' active':''}" onclick="selectDay('${day.id}')">
+      <div class="day-avatar"><div class="day-av-num">${day.dayNum}</div><div class="day-av-sub">Day</div></div>
+      <div class="day-meta">
+        <div class="day-date">${d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</div>
+        <div class="day-loc">${day.location||'Site'}</div>
+        <div class="day-prog">
+          <div class="mini-bar"><div class="mini-fill" style="width:${pct}%;background:${fc}"></div></div>
+          <div class="mini-pct">${pct}%</div>
+        </div>
+      </div>
+      <div class="day-actions">
+        <button class="day-action-btn" onclick="event.stopPropagation();openEditDayModal('${day.id}')" title="Edit day" aria-label="Edit day">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+        </button>
+        <button class="day-action-btn del" onclick="event.stopPropagation();deleteDay('${day.id}')" title="Delete day" aria-label="Delete day">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function filterSidebar(v){renderSidebar(v)}
+function selectDay(id){curDay=id;currentDayTab='tCL';renderSidebar();renderMain();}
+
+// ── DISCUSSION SIDEBAR ──
+function statusCls(s){return s==='done'?'dss-done':s==='in-progress'?'dss-prog':s==='discussion'?'dss-disc':'dss-pend'}
+function statusLabel(s){return s==='done'?'Done':s==='in-progress'?'In Progress':s==='discussion'?'Discussion':'Pending'}
+
+function renderDiscSidebar(f=''){
+  const list = document.getElementById('discList');
+  const fd = discItems.filter(d=>!f||(d.title||'').toLowerCase().includes(f.toLowerCase())||(d.notes||'').toLowerCase().includes(f.toLowerCase()));
+  if(!fd.length){list.innerHTML=`<div style="padding:20px;text-align:center;font-size:11px;color:var(--text3)">No matches</div>`;return}
+  list.innerHTML = fd.map(d=>`
+    <div class="disc-sidebar-item${d.id===curDiscId?' active':''}" onclick="selectDisc('${d.id}')">
+      <div class="disc-si-header">
+        <span class="disc-si-num">#${d.num}</span>
+        <span class="disc-si-title">${esc(d.title)}</span>
+        <span class="disc-si-status ${statusCls(d.status)}">${statusLabel(d.status)}</span>
+      </div>
+    </div>`).join('');
+}
+function filterDiscSidebar(v){renderDiscSidebar(v)}
+function selectDisc(id){curDiscId=id;renderDiscSidebar();renderDiscMain();}
+
+// ── MAIN: DAYS ──
+function renderMain(){
+  const main = document.getElementById('mainContent');
+  if(!curDay){
+    main.innerHTML=`<div class="empty"><div class="empty-ico">🏗️</div><h3>No day selected</h3><p>Add or select an inspection day to begin.</p><button class="btn btn-orange" onclick="openAddDayModal()" style="margin-top:4px">+ Add First Day</button></div>`;
+    return;
+  }
+  const day=getDay(curDay); if(!day)return;
+  const s=sc(day),pct=Math.round((s.c/s.ti)*100);
+  const d=new Date(day.date+'T12:00:00');
+  const ds=d.toLocaleDateString('en-IN',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const nas=Object.values(day.checks||{}).filter(v=>v==='na').length;
+  main.innerHTML=`
+  <div class="day-header">
+    <div>
+      <div class="day-title">Day <span class="day-title-n">${day.dayNum}</span>
+        <span style="font-size:13px;color:var(--text3);font-weight:400;font-family:'Plus Jakarta Sans',sans-serif">— Inspection Report</span>
+      </div>
+      <div class="day-meta-row">
+        <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${ds}</div>
+        <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>${day.location||'Site not set'}</div>
+        <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>${day.inspector||'Inspector N/A'}</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:10px">
+    <div class="score-card">
+      <div class="score-big">${s.e}<span class="score-denom">/${s.t}</span></div>
+      <div class="score-sub">Score · ${pct}% done</div>
+      <div class="score-pbar"><div class="score-pfill" style="width:${pct}%"></div></div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="openEditDayModal('${day.id}')">Edit Day</button>
+    <button class="btn btn-red btn-sm" onclick="deleteDay('${day.id}')">Delete Day</button>
+    </div>
+  </div>
+  <div class="sum-row">
+    <div class="s-card"><div class="s-ico g">✅</div><div><div class="s-val g">${s.c}</div><div class="s-lbl">Checked</div></div></div>
+    <div class="s-card"><div class="s-ico o">⏳</div><div><div class="s-val o">${s.ti-s.c-nas}</div><div class="s-lbl">Remaining</div></div></div>
+    <div class="s-card"><div class="s-ico a">⚠️</div><div><div class="s-val a">${nas}</div><div class="s-lbl">N/A Items</div></div></div>
+    <div class="s-card"><div class="s-ico b">📷</div><div><div class="s-val b">${(day.media||[]).length}</div><div class="s-lbl">Media</div></div></div>
+  </div>
+  <div class="tabs">
+    <button class="tab-btn${currentDayTab==='tCL'?' active':''}" onclick="switchTab(event,'tCL')">Checklist</button>
+    <button class="tab-btn${currentDayTab==='tMD'?' active':''}" onclick="switchTab(event,'tMD')">Media</button>
+    <button class="tab-btn${currentDayTab==='tHI'?' active':''}" onclick="switchTab(event,'tHI')">History</button>
+  </div>
+  <div class="tab-content${currentDayTab==='tCL'?' active':''}" id="tCL">${buildCL(day)}</div>
+  <div class="tab-content${currentDayTab==='tMD'?' active':''}" id="tMD">${buildMD(day)}</div>
+  <div class="tab-content${currentDayTab==='tHI'?' active':''}" id="tHI">${buildHI()}</div>`;
+}
+
+// ── MAIN: DISCUSSIONS ──
+function renderDiscMain(){
+  const main = document.getElementById('mainContent');
+  const total = discItems.length;
+  const doneCount = discItems.filter(d=>d.status==='done').length;
+  const inProg = discItems.filter(d=>d.status==='in-progress').length;
+  const pending = discItems.filter(d=>d.status==='pending').length;
+
+  const filtered = discFilter==='all' ? discItems : discItems.filter(d=>d.status===discFilter);
+
+  const cards = filtered.map(d => {
+    const isExpanded = expandedDisc[d.id];
+    const subtasksDone = (d.subtasks||[]).filter(s=>s.done).length;
+    const subtasksTotal = (d.subtasks||[]).length;
+    const bodyHtml = isExpanded ? buildDiscBody(d) : '';
+    return `
+    <div class="disc-card${isExpanded?' expanded':''}" id="dc_${d.id}">
+      <div class="disc-card-head" onclick="toggleDiscExpand('${d.id}')">
+        <div class="disc-num-badge">${d.num}</div>
+        <div class="disc-head-body">
+          <div class="disc-head-row">
+            <div class="disc-title">${esc(d.title)}</div>
+            <span class="disc-status-badge ds-${d.status==='in-progress'?'prog':d.status==='done'?'done':d.status==='discussion'?'disc':'pend'}" onclick="event.stopPropagation();cycleStatus('${d.id}')" title="Click to change status">${statusLabel(d.status)}</span>
+          </div>
+          ${d.notes?`<div class="disc-preview">${esc(d.notes)}</div>`:''}
+          <div class="disc-meta">
+            <span class="disc-meta-chip">📅 ${d.date||'—'}</span>
+            ${d.assignedTo?`<span class="disc-meta-chip">👤 ${esc(d.assignedTo)}</span>`:''}
+            ${subtasksTotal?`<span class="disc-meta-chip">☑️ ${subtasksDone}/${subtasksTotal} tasks</span>`:''}
+            ${(d.comments||[]).length?`<span class="disc-meta-chip">💬 ${d.comments.length}</span>`:''}
+          </div>
+        </div>
+        <div class="disc-chev${isExpanded?' open':''}">▶</div>
+      </div>
+      <div class="disc-body${isExpanded?' open':''}" id="db_${d.id}">${bodyHtml}</div>
+    </div>`;
+  }).join('');
+
+  main.innerHTML = `
+  <div class="disc-page-header">
+    <div class="disc-page-title">
+      <div class="disc-page-icon">💬</div>
+      Discussion Log
+    </div>
+    <div class="disc-page-sub">Meeting notes, action items, and project decisions — Discussion 03/25</div>
+  </div>
+  <div class="disc-stats">
+    <div class="s-card"><div class="s-ico" style="background:var(--pd)">💬</div><div><div class="s-val" style="color:var(--purple)">${total}</div><div class="s-lbl">Total Items</div></div></div>
+    <div class="s-card"><div class="s-ico g">✅</div><div><div class="s-val g">${doneCount}</div><div class="s-lbl">Done</div></div></div>
+    <div class="s-card"><div class="s-ico a">⚡</div><div><div class="s-val a">${inProg}</div><div class="s-lbl">In Progress</div></div></div>
+    <div class="s-card"><div class="s-ico" style="background:rgba(72,79,88,0.2)">⏸️</div><div><div class="s-val" style="color:var(--text3)">${pending}</div><div class="s-lbl">Pending</div></div></div>
+  </div>
+  <div class="disc-filter-row">
+    <span style="font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace">Filter:</span>
+    <button class="filter-btn${discFilter==='all'?' active':''}" onclick="setDiscFilter('all')">All</button>
+    <button class="filter-btn${discFilter==='done'?' active':''}" onclick="setDiscFilter('done')">Done</button>
+    <button class="filter-btn${discFilter==='in-progress'?' active':''}" onclick="setDiscFilter('in-progress')">In Progress</button>
+    <button class="filter-btn${discFilter==='pending'?' active':''}" onclick="setDiscFilter('pending')">Pending</button>
+    <button class="filter-btn${discFilter==='discussion'?' active':''}" onclick="setDiscFilter('discussion')">For Discussion</button>
+    <button class="btn btn-ghost btn-sm" onclick="openAddDiscModal()" style="margin-left:auto">+ Add Item</button>
+  </div>
+  ${cards||'<div class="empty"><div class="empty-ico">💬</div><h3>No items</h3><p>No discussion items match this filter.</p></div>'}`;
+}
+
+function buildDiscBody(d){
+  const subtasksHtml = (d.subtasks||[]).length ? `
+    <div class="disc-subtasks">
+      <div class="disc-subtask-label">Sub-tasks & Milestones</div>
+      ${d.subtasks.map((st,i)=>`
+        <div class="subtask-item">
+          <div class="subtask-cb${st.done?' ck':''}" onclick="toggleSubtask('${d.id}',${i})"></div>
+          <span class="subtask-text">${esc(st.text)}</span>
+        </div>`).join('')}
+    </div>` : '';
+
+  const commentsHtml = (d.comments||[]).map(c=>`
+    <div class="comment-item">
+      <div class="comment-avatar">${(c.author||'U').charAt(0).toUpperCase()}</div>
+      <div class="comment-bubble">
+        <div class="comment-bubble-top">
+          <span class="comment-author">${esc(c.author||'User')}</span>
+          <span class="comment-time">${c.time||''}</span>
+        </div>
+        <div class="comment-text">${esc(c.text)}</div>
+      </div>
+    </div>`).join('');
+
+  return `
+    <div class="disc-action-row">
+      <span style="font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace">STATUS:</span>
+      <select class="status-select" onchange="updateDiscStatus('${d.id}',this.value)">
+        <option value="pending"${d.status==='pending'?' selected':''}>Pending</option>
+        <option value="in-progress"${d.status==='in-progress'?' selected':''}>In Progress</option>
+        <option value="done"${d.status==='done'?' selected':''}>Done</option>
+        <option value="discussion"${d.status==='discussion'?' selected':''}>For Discussion</option>
+      </select>
+      ${d.assignedTo?`<span class="chip">👤 ${esc(d.assignedTo)}</span>`:''}
+      <button class="btn btn-red btn-sm" onclick="deleteDiscussion('${d.id}')" style="margin-left:auto">Delete Item</button>
+    </div>
+    <div class="disc-detail-grid">
+      <div class="disc-detail-block" style="grid-column:1/-1">
+        <div class="disc-detail-label">Notes & Details</div>
+        <div class="disc-detail-val">${esc(d.notes)||'<span style="color:var(--text3)">No notes added.</span>'}</div>
+      </div>
+    </div>
+    ${subtasksHtml}
+    <div class="disc-comments">
+      <div class="disc-comments-label">Comments (${(d.comments||[]).length})</div>
+      ${commentsHtml}
+      <div class="comment-input-row">
+        <input class="comment-input" type="text" placeholder="Add a comment..." id="ci_${d.id}" onkeydown="if(event.key==='Enter')addComment('${d.id}')">
+        <button class="btn btn-ghost btn-sm" onclick="addComment('${d.id}')">Post</button>
+      </div>
+    </div>`;
+}
+
+function toggleDiscExpand(id){
+  expandedDisc[id] = !expandedDisc[id];
+  if(sideView==='disc') renderDiscMain();
+}
+
+function cycleStatus(id){
+  const d = getDisc(id); if(!d)return;
+  const order = ['pending','in-progress','done','discussion'];
+  const idx = order.indexOf(d.status);
+  d.status = order[(idx+1)%order.length];
+  save(); renderDiscSidebar(); renderDiscMain();
+}
+
+function updateDiscStatus(id, val){
+  const d = getDisc(id); if(!d)return;
+  d.status = val; save(); renderDiscSidebar(); renderDiscMain();
+}
+
+function toggleSubtask(discId, idx){
+  const d = getDisc(discId); if(!d||!d.subtasks)return;
+  d.subtasks[idx].done = !d.subtasks[idx].done;
+  save(); renderDiscMain();
+}
+
+function addComment(discId){
+  const inp = document.getElementById('ci_'+discId); if(!inp)return;
+  const text = inp.value.trim(); if(!text)return;
+  const d = getDisc(discId); if(!d)return;
+  if(!d.comments)d.comments=[];
+  const now = new Date();
+  d.comments.push({author:'Me',text,time:now.toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'})});
+  save(); renderDiscMain();
+}
+
+function setDiscFilter(f){discFilter=f;renderDiscMain()}
+
+// ── CHECKLIST BUILDERS ──
+function resequenceDays(){days.forEach((day,index)=>{day.dayNum=index+1})}
+function resequenceDiscussions(){discItems.forEach((item,index)=>{item.num=index+1})}
+function getChecklistSections(day){
+  const removedSections=day?.removedChecklistSections||[];
+  const sectionOverrides=day?.sectionOverrides||{};
+  const baseSections=Object.keys(CL)
+    .filter(key=>!removedSections.includes(key))
+    .map(key=>({key,...CL[key],...(sectionOverrides[key]||{}),custom:false}));
+  const customSections=Object.entries(day?.customSections||{}).map(([key,section])=>({
+    key,
+    label:section.label,
+    icon:section.icon||'🗂️',
+    cls:section.cls||'cust',
+    custom:true
+  }));
+  return [...baseSections,...customSections];
+}
+function getChecklistItems(day,sectionKey){
+  const baseItems=CL[sectionKey]?.items||[];
+  const customItems=day?.customItems?.[sectionKey]||[];
+  const removedItems=day?.removedChecklistItems?.[sectionKey]||[];
+  const itemOverrides=day?.itemOverrides||{};
+  return [...baseItems,...customItems]
+    .filter(item=>!removedItems.includes(item.id))
+    .map(item=>({...item,...(itemOverrides[item.id]||{})}));
+}
+function getMediaDraftCategory(day){
+  const options=getChecklistSections(day);
+  if(!options.length) return '';
+  return options.some(option=>option.key===day?.mediaDraftCategory) ? day.mediaDraftCategory : options[0].key;
+}
+function setMediaCategory(categoryKey){
+  const day=getDay(curDay); if(!day)return;
+  day.mediaDraftCategory=categoryKey;
+  save();
+  renderMain();
+}
+function triggerMediaUpload(){
+  const day=getDay(curDay); if(!day)return;
+  const categoryKey=getMediaDraftCategory(day);
+  if(categoryKey && day.mediaDraftCategory!==categoryKey){
+    day.mediaDraftCategory=categoryKey;
+    save();
+  }
+  document.getElementById('fi').click();
+}
+async function openCameraModal(){
+  const day=getDay(curDay); if(!day)return;
+  const modal=document.getElementById('cameraModal');
+  const video=document.getElementById('cameraVideo');
+  const fallback=document.getElementById('cameraFallbackText');
+  const categoryKey=getMediaDraftCategory(day);
+  if(categoryKey && day.mediaDraftCategory!==categoryKey){
+    day.mediaDraftCategory=categoryKey;
+    save();
+  }
+  modal.classList.add('open');
+  video.style.display='none';
+  fallback.style.display='block';
+  fallback.textContent='Starting camera...';
+  try{
+    if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){
+      throw new Error('Camera access is not supported in this browser.');
+    }
+    cameraStream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:'environment'}},
+      audio:false
+    });
+    video.srcObject=cameraStream;
+    video.style.display='block';
+    fallback.style.display='none';
+  }catch(err){
+    console.error('camera open error:',err);
+    fallback.textContent='Camera not available here. You can still use Upload + to add a photo.';
+  }
+}
+function stopCameraStream(){
+  if(cameraStream){
+    cameraStream.getTracks().forEach(track=>track.stop());
+    cameraStream=null;
+  }
+  const video=document.getElementById('cameraVideo');
+  if(video) video.srcObject=null;
+}
+function closeCameraModal(){
+  stopCameraStream();
+  document.getElementById('cameraModal').classList.remove('open');
+}
+async function captureCameraPhoto(){
+  const day=getDay(curDay); if(!day)return;
+  const video=document.getElementById('cameraVideo');
+  if(!video||!video.videoWidth||!video.videoHeight){
+    alert('Camera preview is not ready yet.');
+    return;
+  }
+  if(!day.media) day.media=[];
+  const categoryKey=getMediaDraftCategory(day);
+  const categoryLabel=getChecklistSections(day).find(option=>option.key===categoryKey)?.label||'Uncategorized';
+  const canvas=document.createElement('canvas');
+  canvas.width=video.videoWidth;
+  canvas.height=video.videoHeight;
+  const ctx=canvas.getContext('2d');
+  ctx.drawImage(video,0,0,canvas.width,canvas.height);
+  const fileName=`camera-${new Date().toISOString().replace(/[:.]/g,'-')}.jpg`;
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.92));
+  if(!blob){
+    alert('Could not capture photo.');
+    return;
+  }
+  const file=new File([blob],fileName,{type:'image/jpeg'});
+  await saveMediaFile(day, file, categoryKey, categoryLabel);
+  save();
+  closeCameraModal();
+  renderMain();
+}
+function deleteDay(dayId){
+  const idx=days.findIndex(day=>day.id===dayId);
+  if(idx<0) return;
+  if(!confirm('Delete this day?')) return;
+  days.splice(idx,1);
+  resequenceDays();
+  save();
+  renderSidebar();
+  if(!days.length){
+    curDay=null;
+    renderMain();
+    return;
+  }
+  const nextDay=days[Math.min(idx,days.length-1)];
+  selectDay(nextDay.id);
+}
+function deleteDiscussion(discId){
+  const idx=discItems.findIndex(item=>item.id===discId);
+  if(idx<0) return;
+  if(!confirm('Delete this discussion item?')) return;
+  discItems.splice(idx,1);
+  resequenceDiscussions();
+  save();
+  renderDiscSidebar();
+  if(curDiscId===discId){
+    curDiscId=discItems[Math.min(idx,discItems.length-1)]?.id||null;
+  }
+  renderDiscMain();
+}
+function addChecklistItemPrompt(sectionKey){
+  const day=getDay(curDay); if(!day)return;
+  const text=prompt('Enter checklist item');
+  if(!text || !text.trim()) return;
+  if(!day.customItems) day.customItems={};
+  if(!day.customItems[sectionKey]) day.customItems[sectionKey]=[];
+  day.customItems[sectionKey].push({id:`custom_${sectionKey}_${Date.now()}`,text:text.trim(),pts:5,custom:true});
+  save();
+  renderMain();
+  renderSidebar();
+}
+function addChecklistCategoryPrompt(){
+  const day=getDay(curDay); if(!day)return;
+  const label=prompt('Enter category name');
+  if(!label || !label.trim()) return;
+  if(!day.customSections) day.customSections={};
+  const key=`custom_section_${Date.now()}`;
+  day.customSections[key]={label:label.trim(),icon:'🗂️',cls:'cust'};
+  save();
+  renderMain();
+}
+function editChecklistCategory(sectionKey){
+  const day=getDay(curDay); if(!day)return;
+  const section=getChecklistSections(day).find(entry=>entry.key===sectionKey);
+  if(!section) return;
+  const label=prompt('Edit category name', section.label||'');
+  if(label===null) return;
+  const cleaned=label.trim();
+  if(!cleaned){alert('Please enter category name.');return}
+  if(section.custom){
+    if(!day.customSections?.[sectionKey]) return;
+    day.customSections[sectionKey]={...day.customSections[sectionKey],label:cleaned};
+  } else {
+    if(!day.sectionOverrides) day.sectionOverrides={};
+    day.sectionOverrides[sectionKey]={...(day.sectionOverrides[sectionKey]||{}),label:cleaned};
+  }
+  save();
+  renderMain();
+}
+function editChecklistItem(sectionKey,itemId){
+  const day=getDay(curDay); if(!day)return;
+  const item=getChecklistItems(day,sectionKey).find(entry=>entry.id===itemId);
+  if(!item) return;
+  const nextText=prompt('Edit checklist item', item.text||'');
+  if(nextText===null) return;
+  const cleaned=nextText.trim();
+  if(!cleaned){alert('Please enter checklist item text.');return}
+  const isCustom=Boolean(day.customItems?.[sectionKey]?.some(entry=>entry.id===itemId));
+  if(isCustom){
+    day.customItems[sectionKey]=day.customItems[sectionKey].map(entry=>entry.id===itemId?{...entry,text:cleaned}:entry);
+  } else {
+    if(!day.itemOverrides) day.itemOverrides={};
+    day.itemOverrides[itemId]={...(day.itemOverrides[itemId]||{}),text:cleaned};
+  }
+  save();
+  renderMain();
+  renderSidebar();
+}
+function deleteChecklistCategory(sectionKey){
+  const day=getDay(curDay); if(!day)return;
+  if(!confirm('Delete this checklist category?')) return;
+  const section=getChecklistSections(day).find(entry=>entry.key===sectionKey);
+  if(!section) return;
+  const removedItems=getChecklistItems(day,sectionKey)||[];
+  removedItems.forEach(item=>{
+    if(day.checks) delete day.checks[item.id];
+    if(day.comments) delete day.comments[item.id];
+  });
+  if(day.customItems) delete day.customItems[sectionKey];
+  if(day.removedChecklistItems) delete day.removedChecklistItems[sectionKey];
+  if(day.sectionOverrides) delete day.sectionOverrides[sectionKey];
+  if(section.custom){
+    if(day.customSections) delete day.customSections[sectionKey];
+  } else {
+    if(!day.removedChecklistSections) day.removedChecklistSections=[];
+    if(!day.removedChecklistSections.includes(sectionKey)){
+      day.removedChecklistSections.push(sectionKey);
+    }
+  }
+  if(day.mediaDraftCategory===sectionKey){
+    const nextSections=getChecklistSections({
+      ...day,
+      removedChecklistSections: [...(day.removedChecklistSections||[]), ...(section.custom?[]:[sectionKey])]
+    });
+    day.mediaDraftCategory=nextSections.find(entry=>entry.key!==sectionKey)?.key||'';
+  }
+  save();
+  renderMain();
+  renderSidebar();
+}
+function deleteChecklistItem(sectionKey,itemId){
+  const day=getDay(curDay); if(!day)return;
+  if(!confirm('Delete this checklist item?')) return;
+  const isCustom=Boolean(day.customItems?.[sectionKey]?.some(item=>item.id===itemId));
+  if(isCustom){
+    day.customItems[sectionKey]=day.customItems[sectionKey].filter(item=>item.id!==itemId);
+    if(!day.customItems[sectionKey].length) delete day.customItems[sectionKey];
+  } else {
+    if(!day.removedChecklistItems) day.removedChecklistItems={};
+    if(!day.removedChecklistItems[sectionKey]) day.removedChecklistItems[sectionKey]=[];
+    if(!day.removedChecklistItems[sectionKey].includes(itemId)){
+      day.removedChecklistItems[sectionKey].push(itemId);
+    }
+  }
+  if(day.checks) delete day.checks[itemId];
+  if(day.comments) delete day.comments[itemId];
+  save();
+  renderMain();
+  renderSidebar();
+}
+
+function buildCL(day){
+  const sectionHtml=getChecklistSections(day).map(cl=>{
+    const k=cl.key,sectionItems=getChecklistItems(day,k),tot=sectionItems.length;
+    const chk=sectionItems.filter(i=>day.checks?.[i.id]==='checked').length;
+    const pct=tot?Math.round((chk/tot)*100):0;
+    const items=sectionItems.length?sectionItems.map(item=>{
+      const st=day.checks?.[item.id]||'none',cm=day.comments?.[item.id]||'',h=getHist(item.id,curDay);
+      return `<div class="ci ${st==='checked'?'ck':''} ${st==='na'?'na':''}" id="ci_${item.id}">
+        <div class="checkbox ${st==='checked'?'ck':''}" onclick="toggleCk('${item.id}')"></div>
+        <div class="ci-body">
+          <div class="ci-top"><span class="ci-lbl">${item.text}</span><span class="pts">+${item.pts}pts</span></div>
+          ${h?`<div class="ci-hist">↩ ${h}</div>`:''}
+          <div class="ci-bottom">
+            <input class="remark" type="text" placeholder="Add site remark..." value="${esc(cm)}" onchange="saveCm('${item.id}',this.value)">
+            <button class="na-btn ${st==='na'?'on':''}" onclick="toggleNA('${item.id}')">N/A</button>
+            <button class="ci-edit" onclick="event.stopPropagation();editChecklistItem('${k}','${item.id}')">Edit Item</button>
+            <button class="ci-del" onclick="event.stopPropagation();deleteChecklistItem('${k}','${item.id}')">Delete Item</button>
+          </div>
+        </div>
+      </div>`;
+    }).join(''):`<div class="cl-empty">No checklist items yet. Use + Add Item.</div>`;
+    return `<div class="cl-section">
+      <div class="cl-head" onclick="toggleSect('${k}')">
+        <div class="cl-head-l">
+          <div class="cl-ico ${cl.cls}">${cl.icon}</div>
+          <span class="cl-name">${cl.label}</span>
+          <span class="cl-cnt">${chk}/${tot}</span>
+        </div>
+        <div class="cl-right">
+          <button class="cl-add-btn" onclick="event.stopPropagation();addChecklistItemPrompt('${k}')">+ Add Item</button>
+          <button class="cl-edit-btn" onclick="event.stopPropagation();editChecklistCategory('${k}')">Edit Category</button>
+          <button class="cl-delete-btn" onclick="event.stopPropagation();deleteChecklistCategory('${k}')">Delete Category</button>
+          <div class="cl-pbar"><div class="cl-pfill ${cl.cls}" style="width:${pct}%"></div></div>
+          <span class="cl-pct">${pct}%</span>
+          <span class="cl-chev open" id="cv_${k}">▶</span>
+        </div>
+      </div>
+      <div class="cl-body" id="cb_${k}">${items}</div>
+    </div>`;
+  }).join('');
+  return `<div class="cl-toolbar"><button class="cl-toolbar-btn" onclick="addChecklistCategoryPrompt()">+ Add Category</button></div>${sectionHtml}`;
+}
+
+function buildMD(day){
+  const m=(day.media||[]).map((item,index)=>({...item,__index:index}));
+  const categoryOptions=getChecklistSections(day);
+  const selectedCategory=getMediaDraftCategory(day);
+  const groupedMap={};
+  m.forEach(item=>{
+    const categoryKey=item.categoryKey||'uncategorized';
+    const categoryLabel=categoryOptions.find(option=>option.key===categoryKey)?.label||item.categoryLabel||'Uncategorized';
+    if(!groupedMap[categoryKey]) groupedMap[categoryKey]={label:categoryLabel,items:[]};
+    groupedMap[categoryKey].items.push(item);
+  });
+  const groups=Object.entries(groupedMap).map(([key,group])=>{
+    const groupThumbs=group.items.map(x=>{
+      const src=mediaSrc(x);
+      const preview=src && isVideoMedia(x)
+        ? `<video src="${esc(src)}" muted playsinline preload="metadata"></video>`
+        : src
+          ? `<img src="${esc(src)}" alt="">`
+          : `<div class="media-empty" style="margin:0;min-height:120px">Preview unavailable</div>`;
+      return `<div class="media-thumb" onclick="openMedia(${x.__index})">${preview}<div class="media-meta">${esc(x.name||group.label)}</div><button class="rm" onclick="event.stopPropagation();rmMedia(${x.__index})">✕</button></div>`;
+    }).join('');
+    return `<div class="media-group">
+      <div class="media-group-head">
+        <div class="media-group-title"><div class="media-dot"></div>${esc(group.label)}</div>
+        <div class="media-group-count">${group.items.length} file${group.items.length===1?'':'s'}</div>
+      </div>
+      <div class="media-grid">${groupThumbs}</div>
+    </div>`;
+  }).join('');
+  return `<div class="media-wrap">
+    <div class="media-hd">
+      <div class="media-ttl"><div class="media-dot"></div>Site Photos & Videos</div>
+      <div class="media-action-row">
+        <button class="btn btn-ghost btn-sm" onclick="openCameraModal()">📷 Camera</button>
+        <button class="btn btn-ghost btn-sm" onclick="triggerMediaUpload()">Upload +</button>
+      </div>
+    </div>
+    <div class="media-tools">
+      <select class="media-select" onchange="setMediaCategory(this.value)">
+        ${categoryOptions.map(option=>`<option value="${option.key}"${option.key===selectedCategory?' selected':''}>${esc(option.label)}</option>`).join('')}
+      </select>
+      <div class="media-help">${mediaStorageHelpText()}</div>
+    </div>
+    ${m.length?`<div class="media-groups">${groups}</div>`:''}
+    <div class="media-grid" style="margin-top:12px">
+      <div class="media-add camera-add" onclick="openCameraModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>Camera
+      </div>
+      <div class="media-add" onclick="triggerMediaUpload()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Upload
+      </div>
+    </div>
+    ${!m.length?`<div class="media-empty">No photos yet. Choose a checklist category, then upload files.</div>`:''}
+  </div>`;
+}
+
+function buildHI(){
+  const rows=days.slice().reverse().map(day=>{
+    const s=sc(day),pct=Math.round((s.c/s.ti)*100);
+    const status=pct===100?'done':pct>0?'partial':'pending',label=pct===100?'Complete':pct>0?'In Progress':'Pending';
+    const d=new Date(day.date+'T12:00:00');
+    const fc=pct===100?'var(--lime)':pct>0?'var(--amber)':'var(--text3)';
+    return `<tr ${day.id===curDay?'style="background:rgba(255,107,43,0.04)"':''}>
+      <td><strong style="color:var(--orange)">D${day.dayNum}</strong></td>
+      <td>${d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</td>
+      <td style="color:var(--text2)">${day.location||'—'}</td>
+      <td style="color:var(--text2)">${day.inspector||'—'}</td>
+      <td><span style="font-family:'JetBrains Mono',monospace;font-size:11px">${s.e}/${s.t}</span></td>
+      <td><div style="display:flex;align-items:center;gap:7px"><div style="width:60px;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="width:${pct}%;height:100%;border-radius:2px;background:${fc}"></div></div><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2)">${pct}%</span></div></td>
+      <td><span class="pill ${status}">${label}</span></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="selectDay('${day.id}')">View →</button></td>
+    </tr>`;
+  }).join('');
+  return `<div class="hist-wrap">
+    <div class="hist-hd"><div class="hist-ttl">All Inspection Days</div><div class="hist-cnt">${days.length} days</div></div>
+    <div style="overflow-x:auto"><table class="ht">
+      <thead><tr><th>Day</th><th>Date</th><th>Site</th><th>Inspector</th><th>Score</th><th>Progress</th><th>Status</th><th></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:2rem;font-size:12px">No inspection days added yet</td></tr>'}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function getHist(id,cid){
+  return days.filter(d=>d.id!==cid).slice(-3).reverse().map(d=>{
+    const s=d.checks?.[id];
+    return s==='checked'?`D${d.dayNum}✓`:s==='na'?`D${d.dayNum}N/A`:null;
+  }).filter(Boolean).join(' · ');
+}
+
+// ── INSPECTION INTERACTIONS ──
+function toggleSect(k){const b=document.getElementById('cb_'+k),c=document.getElementById('cv_'+k);if(!b)return;if(b.style.display==='none'){b.style.display='';c.classList.add('open')}else{b.style.display='none';c.classList.remove('open')}}
+function toggleCk(id){const day=getDay(curDay);if(!day)return;if(!day.checks)day.checks={};if(day.checks[id]==='checked')delete day.checks[id];else day.checks[id]='checked';save();renderMain();renderSidebar()}
+function toggleNA(id){const day=getDay(curDay);if(!day)return;if(!day.checks)day.checks={};if(day.checks[id]==='na')delete day.checks[id];else day.checks[id]='na';save();renderMain()}
+function saveCm(id,v){const day=getDay(curDay);if(!day)return;if(!day.comments)day.comments={};day.comments[id]=v;save()}
+async function handleUpload(e){
+  const day=getDay(curDay);if(!day)return;
+  if(!day.media)day.media=[];
+  const files=Array.from(e.target.files);
+  const categoryKey=getMediaDraftCategory(day);
+  const categoryLabel=getChecklistSections(day).find(option=>option.key===categoryKey)?.label||'Uncategorized';
+  e.target.value='';
+  if(!files.length) return;
+  for(const file of files){
+    await saveMediaFile(day, file, categoryKey, categoryLabel);
+  }
+  save();
+  renderMain();
+}
+async function rmMedia(i){
+  const day=getDay(curDay);if(!day||!day.media)return;
+  const item=day.media[i];
+  if(!item) return;
+  try{
+    if(item.attachmentId){
+      await deleteAttachmentFile(item.attachmentId);
+    }
+    day.media.splice(i,1);
+    save();
+    renderMain();
+  }catch(err){
+    alert(err && err.message ? err.message : 'Could not delete the file.');
+  }
+}
+function openLB(src){document.getElementById('lbImg').src=src;document.getElementById('lightbox').classList.add('open')}
+function openMedia(index){
+  const day=getDay(curDay); if(!day||!day.media) return;
+  const item=day.media[index]; if(!item) return;
+  const src=mediaSrc(item);
+  if(!src){
+    alert('Preview is not available for this file yet.');
+    return;
+  }
+  if(isImageMedia(item)){
+    openLB(src);
+    return;
+  }
+  window.open(src,'_blank','noopener');
+}
+function closeLightbox(){document.getElementById('lightbox').classList.remove('open')}
+function switchTab(e,id){currentDayTab=id;document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));e.target.classList.add('active');document.getElementById(id).classList.add('active')}
+
+// ── MODALS ──
+function setDayModalMode(editing){
+  document.getElementById('dayModalTitle').innerHTML=`<div class="modal-ico">📅</div>${editing?'Edit Inspection Day':'Add Inspection Day'}`;
+  document.getElementById('dayModalAction').textContent=editing?'Save Changes':'Create Day →';
+}
+function openAddDayModal(){
+  editingDayId=null;
+  setDayModalMode(false);
+  document.getElementById('nd-date').value=new Date().toISOString().split('T')[0];
+  ['nd-loc','nd-insp','nd-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('addDayModal').classList.add('open');
+}
+function openEditDayModal(dayId){
+  const day=getDay(dayId); if(!day)return;
+  editingDayId=dayId;
+  setDayModalMode(true);
+  document.getElementById('nd-date').value=day.date||'';
+  document.getElementById('nd-loc').value=day.location||'';
+  document.getElementById('nd-insp').value=day.inspector||'';
+  document.getElementById('nd-notes').value=day.notes||'';
+  document.getElementById('addDayModal').classList.add('open');
+}
+function openAddDiscModal(){['di-title','di-assign','di-notes','di-subtasks'].forEach(id=>document.getElementById(id).value='');document.getElementById('di-status').value='pending';document.getElementById('addDiscModal').classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+
+function saveDay(){
+  const date=document.getElementById('nd-date').value;
+  if(!date){alert('Please select a date.');return}
+  const location=document.getElementById('nd-loc').value;
+  const inspector=document.getElementById('nd-insp').value;
+  const notes=document.getElementById('nd-notes').value;
+
+  if(editingDayId){
+    const day=getDay(editingDayId);
+    if(!day)return;
+    day.date=date;
+    day.location=location;
+    day.inspector=inspector;
+    day.notes=notes;
+    save();
+    closeModal('addDayModal');
+    renderSidebar();
+    selectDay(day.id);
+    editingDayId=null;
+    return;
+  }
+
+  const id='day_'+Date.now();
+  days.push({id,dayNum:days.length+1,date,location,inspector,notes,checks:{},comments:{},media:[]});
+  save();closeModal('addDayModal');renderSidebar();selectDay(id);
+}
+
+function addDiscItem(){
+  const title=document.getElementById('di-title').value.trim();
+  if(!title){alert('Please enter a title.');return}
+  const subtasksRaw=document.getElementById('di-subtasks').value.trim();
+  const subtasks=subtasksRaw?subtasksRaw.split('\n').filter(Boolean).map((t,i)=>({id:'st_new_'+Date.now()+'_'+i,text:t.trim(),done:false})):[];
+  const id='disc_'+Date.now();
+  discItems.push({id,num:discItems.length+1,title,status:document.getElementById('di-status').value,assignedTo:document.getElementById('di-assign').value,notes:document.getElementById('di-notes').value,subtasks,comments:[],date:new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit'}).replace(/\//g,'/')});
+  save();closeModal('addDiscModal');renderDiscSidebar();renderDiscMain();
+}
+
+// ── EXPORT ──
+function exportAll(){
+  const lines=['DAILY TRACKER — EXPORT','='.repeat(52),''];
+  lines.push('INSPECTION DAYS','─'.repeat(40),'');
+  days.forEach(day=>{
+    const s=sc(day),pct=Math.round((s.c/s.ti)*100);
+    lines.push(`Day ${day.dayNum} | ${day.date} | ${day.location||'N/A'} | ${day.inspector||'N/A'}`);
+    lines.push(`Score: ${s.e}/${s.t} pts (${pct}%)`);
+    if(day.notes)lines.push(`Notes: ${day.notes}`);
+    Object.keys(CL).forEach(k=>{
+      lines.push(`\n  [ ${CL[k].label.toUpperCase()} ]`);
+      CL[k].items.forEach(i=>{const st=day.checks?.[i.id],cm=day.comments?.[i.id]?` → ${day.comments[i.id]}`:'';lines.push(`  ${st==='checked'?'[✓]':st==='na'?'[N/A]':'[ ]'} ${i.text}${cm}`)});
+    });
+    lines.push('\n'+'-'.repeat(52)+'\n');
+  });
+  lines.push('','DISCUSSION LOG','─'.repeat(40),'');
+  discItems.forEach(d=>{
+    lines.push(`#${d.num} [${statusLabel(d.status).toUpperCase()}] ${d.title}`);
+    if(d.assignedTo)lines.push(`  Assigned: ${d.assignedTo}`);
+    if(d.notes)lines.push(`  Notes: ${d.notes}`);
+    if(d.subtasks?.length){lines.push('  Tasks:');d.subtasks.forEach(st=>lines.push(`    ${st.done?'[✓]':'[ ]'} ${st.text}`))}
+    if(d.comments?.length){lines.push('  Comments:');d.comments.forEach(c=>lines.push(`    ${c.author}: ${c.text}`))}
+    lines.push('');
+  });
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/plain'}));
+  a.download=`daily-tracker-${new Date().toISOString().slice(0,10)}.txt`;a.click();
+}
+
+// ── INIT ──
+document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+renderSidebar();
+renderDiscSidebar();
+renderMain();
+</script>
+</body>
+</html>

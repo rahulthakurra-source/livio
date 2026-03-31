@@ -75,6 +75,14 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);font
 /* ── CONTENT ── */
 .content{padding:22px 24px;flex:1}
 .page{display:none}.page.on{display:block}
+.page.page-full.on{display:flex;flex-direction:column;height:calc(100vh - 132px);min-height:620px}
+.tracker-panel{flex:1;display:flex;overflow:hidden;margin-bottom:0;border:1px solid #111b2a;border-radius:12px;background:#0D1117;box-shadow:var(--sh)}
+.tracker-frame{display:block;width:100%;height:100%;border:0;background:#0D1117}
+.main.dailytracker-full .topbar{display:none}
+.main.dailytracker-full .content{padding:0}
+.main.dailytracker-full #pg-dailytracker.page-full.on{height:100vh;min-height:0;margin:0}
+#pg-dailytracker.page-full.on{height:calc(100vh - 88px);min-height:0;margin:-22px -24px 0}
+#pg-dailytracker .tracker-panel{border:0;border-radius:0;box-shadow:none}
 
 /* ── CARDS ── */
 .proj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
@@ -230,6 +238,9 @@ tr:hover .row-actions{opacity:1}
   .tb-right{width:100%;justify-content:flex-end;flex-wrap:wrap}
   .bal-strip{padding:10px 14px;justify-content:flex-start}
   .content{padding:14px}
+  .page.page-full.on{height:calc(100vh - 176px);min-height:520px}
+  .main.dailytracker-full #pg-dailytracker.page-full.on{height:100vh}
+  #pg-dailytracker.page-full.on{height:calc(100vh - 148px);margin:-14px -14px 0}
   .proj-grid,.metrics,.two-col,.sum-grid,.exp-grid,.fg{grid-template-columns:1fr}
   .sh{flex-direction:column;align-items:flex-start;gap:10px}
   .ph{flex-wrap:wrap;gap:8px}
@@ -397,6 +408,7 @@ tr:hover .row-actions{opacity:1}
   <div class="sb-scroll">
   <ul class="sb-nav">
     <li data-page="projects"><a id="n-projects"   onclick="nav('projects')">  <span class="ic">🏠</span>All Projects     <span class="ct" id="ct-projects">0</span></a></li>
+    <li data-page="dailytracker"><a id="n-dailytracker" onclick="nav('dailytracker')"> <span class="ic">📋</span>Daily Tracker</a></li>
     <li data-page="dashboard"><a id="n-dashboard"  onclick="nav('dashboard')"> <span class="ic">📊</span>Dashboard</a></li>
     <li data-page="works"><a id="n-works"      onclick="nav('works')">     <span class="ic">🏗</span>Works at Site    <span class="ct" id="ct-works">0</span></a></li>
     <li data-page="milestones"><a id="n-milestones" onclick="nav('milestones')"><span class="ic">🏆</span>Milestones       <span class="ct" id="ct-ms">0</span></a></li>
@@ -480,6 +492,18 @@ tr:hover .row-actions{opacity:1}
         <button class="btn btn-navy" onclick="openModal('project')">+ New Project</button>
       </div>
       <div class="proj-grid" id="proj-grid"></div>
+    </div>
+
+    <!-- ── DAILY TRACKER ── -->
+    <div class="page page-full" id="pg-dailytracker">
+      <div class="panel tracker-panel">
+        <iframe
+          id="daily-tracker-frame"
+          class="tracker-frame"
+          src="/legacy/daily-tracker.html?v=2026-03-31-project-wise&embed=1&backendUrl="
+          title="Daily Tracker"
+        ></iframe>
+      </div>
     </div>
 
     <!-- ── DASHBOARD ── -->
@@ -1425,15 +1449,33 @@ const SEED = {
     {id:'i5',name:'Special Inspection — Welding',      inspDate:'2026-05-10',inspTime:'09:00',location:'SMRF Joints · CBC §1705.12',              refs:'CBC §1705.12 · AISC 341', ahj:'icc',      notes:'ICC-Certified inspector required',files:[]},
   ],
 };
+const DEPRECATED_PROJECT_IDS = new Set(['proj_lavina','proj_lavina_ct']);
+function isDeprecatedProject(project){
+  if(!project) return false;
+  if(project.id&&DEPRECATED_PROJECT_IDS.has(project.id)) return true;
+  const haystack=[project.name,project.street,project.address].filter(Boolean).join(' | ').toLowerCase();
+  return haystack.includes('lavina');
+}
+const CORE_PROJECTS = [SEED];
+const cloneCoreProjects = () => JSON.parse(JSON.stringify(CORE_PROJECTS));
 
 function defaultDB(){
-  return {projects:[JSON.parse(JSON.stringify(SEED))],activeId:'proj_madera'};
+  return {projects:cloneCoreProjects(),activeId:'proj_madera'};
 }
 function normalizeDB(input){
   const db=input&&typeof input==='object'?input:defaultDB();
-  if(!Array.isArray(db.projects)) db.projects=[JSON.parse(JSON.stringify(SEED))];
+  if(!Array.isArray(db.projects)) db.projects=cloneCoreProjects();
+  db.projects = (db.projects||[]).filter(p=>p && !isDeprecatedProject(p));
+  const hasOnlyMadera=db.projects.length===1&&db.projects[0]&&db.projects[0].id==='proj_madera';
+  if(hasOnlyMadera){
+    db.projects=cloneCoreProjects();
+    db.activeId='proj_madera';
+  }
+  if(DEPRECATED_PROJECT_IDS.has(db.activeId)) db.activeId='proj_madera';
+  if(!(db.projects||[]).some(p=>p&&p.id===db.activeId)) db.activeId=db.projects[0]?.id||'proj_madera';
   if(!db.activeId) db.activeId=db.projects[0]?.id||'proj_madera';
   (db.projects||[]).forEach(p=>{
+    if(!p.dailyTracker || typeof p.dailyTracker!=='object') p.dailyTracker={days:[],discItems:[]};
     if(!p.works)p.works=[];
     if(!p.milestones)p.milestones=[];
     if(!p.quotes)p.quotes=[];
@@ -1477,12 +1519,31 @@ function normalizeDB(input){
   });
   return db;
 }
+const LOCAL_DB_KEY = 'livio_local_db_v1';
+function readLocalDBCache(){
+  try{
+    const raw=localStorage.getItem(LOCAL_DB_KEY);
+    if(!raw) return null;
+    return normalizeDB(JSON.parse(raw));
+  }catch(e){
+    console.warn('local DB cache read failed:',e);
+    return null;
+  }
+}
+function writeLocalDBCache(db){
+  try{
+    localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(normalizeDB(db)));
+  }catch(e){
+    console.warn('local DB cache write failed:',e);
+  }
+}
 function loadDB(){
-  return normalizeDB(defaultDB());
+  return readLocalDBCache() || normalizeDB(defaultDB());
 }
 function saveDB(){
   try{
     DB=normalizeDB(DB);
+    writeLocalDBCache(DB);
   }catch(e){
     const msg=e.name==='QuotaExceededError'||e.code===22
       ?'⚠ Save failed before remote sync could run.'
@@ -1546,6 +1607,8 @@ let supabasePushTimer = null;
 let projectSyncChain = Promise.resolve();
 const REMOTE_PROJECT_IDS = new Set();
 let authChannel = null;
+let dailyTrackerRefreshTimer = null;
+let dailyTrackerRefreshInFlight = false;
 
 function normalizeAuthSession(value){
   if(!value||typeof value!=='object') return null;
@@ -1889,12 +1952,14 @@ function defaultAppSnapshot(){
 function setRemoteProjectIds(projects){
   REMOTE_PROJECT_IDS.clear();
   (projects||[]).forEach(project=>{
-    if(project&&project.id) REMOTE_PROJECT_IDS.add(project.id);
+    if(project&&project.id&&!isDeprecatedProject(project)) REMOTE_PROJECT_IDS.add(project.id);
   });
 }
 function upsertLocalProject(project){
   if(!project||!project.id) return;
+  if(isDeprecatedProject(project)) return null;
   const normalized=normalizeDB({projects:[project],activeId:project.id}).projects[0];
+  if(!normalized||!normalized.id) return null;
   const idx=(DB.projects||[]).findIndex(x=>x.id===normalized.id);
   if(idx>-1) DB.projects[idx]=normalized;
   else DB.projects.push(normalized);
@@ -1994,6 +2059,18 @@ async function deleteProjectFromSupabase(projectId, silent=true){
     return false;
   });
 }
+function purgeDeprecatedProjects(){
+  const deprecatedLocal=(DB.projects||[]).filter(project=>project&&isDeprecatedProject(project)).map(project=>project.id);
+  if(deprecatedLocal.length){
+    DB.projects=(DB.projects||[]).filter(project=>project&&!isDeprecatedProject(project));
+    if(!(DB.projects||[]).some(project=>project&&project.id===DB.activeId)) DB.activeId=DB.projects[0]?.id||'proj_madera';
+    saveDB();
+    if(CURRENT_USER) renderAll();
+  }
+  [...REMOTE_PROJECT_IDS].forEach(id=>{
+    if(DEPRECATED_PROJECT_IDS.has(id)) deleteProjectFromSupabase(id,true);
+  });
+}
 async function syncUsersToSupabase(silent=false){
   const client=initSupabaseClient();
   if(!client) return false;
@@ -2026,7 +2103,9 @@ function buildAppSnapshot(){
 }
 function applyAppSnapshot(snapshot){
   if(!snapshot||!snapshot.db) throw new Error('Remote payload is missing app state');
+  const deprecatedRemoteIds=((snapshot.db.projects)||[]).filter(project=>isDeprecatedProject(project)).map(project=>project.id).filter(Boolean);
   DB=normalizeDB(snapshot.db);
+  writeLocalDBCache(DB);
   setRemoteProjectIds(DB.projects||[]);
   Object.keys(FA).forEach(k=>delete FA[k]);
   APP_STATE.users=((snapshot.users&&snapshot.users.length)?snapshot.users:DEFAULT_USERS).map(normalizeUserRecord);
@@ -2039,6 +2118,7 @@ function applyAppSnapshot(snapshot){
   applyCurrentUserUI(false);
   buildSidebarNav();
   if(CURRENT_USER) renderAll();
+  deprecatedRemoteIds.forEach(id=>deleteProjectFromSupabase(id,true));
 }
 async function fetchUsersFromSupabase(){
   const data=await backendRequest('/users');
@@ -2145,6 +2225,45 @@ async function pullFromSupabase(){
     toast('Backend pull failed');
   }
 }
+async function refreshActiveProjectFromSupabase(options={}){
+  const client=initSupabaseClient();
+  const projectId=proj()?.id||DB.activeId||'';
+  if(!client||!projectId||dailyTrackerRefreshInFlight) return false;
+  dailyTrackerRefreshInFlight=true;
+  try{
+    const data=await backendRequest('/projects/'+encodeURIComponent(projectId));
+    const remote=data&&data.project?data.project:null;
+    if(!remote) return false;
+    const local=(DB.projects||[]).find(x=>x.id===projectId)||null;
+    const remoteUpdatedAt=String(remote.updatedAt||'').trim();
+    const localUpdatedAt=String(local&&local.updatedAt||'').trim();
+    if(!options.force && remoteUpdatedAt && localUpdatedAt && remoteUpdatedAt===localUpdatedAt){
+      return false;
+    }
+    applyRemoteProject(remote,true);
+    return true;
+  }catch(e){
+    if(!options.silent){
+      console.warn('daily tracker refresh failed:',e);
+    }
+    return false;
+  }finally{
+    dailyTrackerRefreshInFlight=false;
+  }
+}
+function scheduleDailyTrackerAutoRefresh(){
+  if(dailyTrackerRefreshTimer){
+    clearInterval(dailyTrackerRefreshTimer);
+    dailyTrackerRefreshTimer=null;
+  }
+  if(curPage!=='dailytracker') return;
+  const client=initSupabaseClient();
+  if(!client) return;
+  dailyTrackerRefreshTimer=setInterval(()=>{
+    if(document.hidden) return;
+    refreshActiveProjectFromSupabase({silent:true});
+  },8000);
+}
 function scheduleSupabasePush(){
   const cfg=getSupabaseConfig();
   if(!normalizeApiBase(cfg.url)) return;
@@ -2182,8 +2301,8 @@ async function bootstrapSupabase(){
 //  NAVIGATION
 // ══════════════════════════════════════════════════════════════════
 let curPage = 'projects';
-const PAGE_TITLES = {projects:'All Projects',dashboard:'Dashboard Overview',works:'Works at Site',milestones:'Project Milestones',quotes:'Quotes Received',plans:'Plans & Documents',inspections:'Inspections Scheduled',payments:'Payments',invoices:'Invoice Tracker',vendorprofiles:'Vendor Directory',vendors:'Vendor Contracts',clientcontracts:'Client Contracts',clientinvoices:'Client Invoices',checklist:'Project Checklist',qaqc:'QA/QC Log',compliance:'Compliance Tracker',export:'Export & Download'};
-const NEEDS_PROJECT = ['dashboard','works','milestones','quotes','plans','inspections','payments','invoices','vendorprofiles','vendors','clientcontracts','clientinvoices','checklist','qaqc','compliance','export'];
+const PAGE_TITLES = {projects:'All Projects',dailytracker:'Daily Tracker',dashboard:'Dashboard Overview',works:'Works at Site',milestones:'Project Milestones',quotes:'Quotes Received',plans:'Plans & Documents',inspections:'Inspections Scheduled',payments:'Payments',invoices:'Invoice Tracker',vendorprofiles:'Vendor Directory',vendors:'Vendor Contracts',clientcontracts:'Client Contracts',clientinvoices:'Client Invoices',checklist:'Project Checklist',qaqc:'QA/QC Log',compliance:'Compliance Tracker',export:'Export & Download'};
+const NEEDS_PROJECT = ['dailytracker','dashboard','works','milestones','quotes','plans','inspections','payments','invoices','vendorprofiles','vendors','clientcontracts','clientinvoices','checklist','qaqc','compliance','export'];
 
 function buildSidebarNav(){
   const cu=currentUser();
@@ -2206,19 +2325,71 @@ function nav(page) {
   if(NEEDS_PROJECT.includes(page)&&!proj()){ toast('⚠ Select or create a project first'); page='projects'; }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
   vEl('pg-'+page)?.classList.add('on');
+  vEl('app-main')?.classList.toggle('dailytracker-full', page==='dailytracker');
   document.querySelectorAll('.sb-nav a').forEach(a=>a.classList.remove('on'));
   vEl('n-'+page)?.classList.add('on');
   vEl('page-title').textContent = PAGE_TITLES[page]||page;
-  const addMap = {projects:'+ New Project',works:'+ Add Work',milestones:'+ Add Milestone',quotes:'+ Add Quote',plans:'+ Upload Doc',inspections:'+ Add Inspection',payments:'',invoices:'',vendorprofiles:'',vendors:'',clientcontracts:'',clientinvoices:'',checklist:'',qaqc:'',compliance:'',export:''};
+  const addMap = {projects:'+ New Project',dailytracker:'',works:'+ Add Work',milestones:'+ Add Milestone',quotes:'+ Add Quote',plans:'+ Upload Doc',inspections:'+ Add Inspection',payments:'',invoices:'',vendorprofiles:'',vendors:'',clientcontracts:'',clientinvoices:'',checklist:'',qaqc:'',compliance:'',export:''};
   const addModal = {projects:'project',works:'work',milestones:'milestone',quotes:'quote',plans:'plan',inspections:'inspection'};
   const btn=vEl('add-btn');
   if(addMap[page]){btn.style.display=''; btn.textContent=addMap[page]; btn.onclick=()=>openModal(addModal[page]);}
   else btn.style.display='none';
   const strip=vEl('bal-strip');
   strip.classList.toggle('show', page==='payments');
-  curPage=page; renderAll();
+  curPage=page;
+  scheduleDailyTrackerAutoRefresh();
+  renderAll();
 }
 function handleAdd(){ nav(curPage); }
+function getEmbeddedDailyTrackerHTML(){
+  try{
+    return typeof window.__DAILY_TRACKER_HTML__ === 'string' ? window.__DAILY_TRACKER_HTML__ : '';
+  }catch(_err){
+    return '';
+  }
+}
+function buildEmbeddedDailyTrackerDoc(params){
+  const embeddedHtml = getEmbeddedDailyTrackerHTML();
+  if(!embeddedHtml) return '';
+  const payload = `<script>window.__TRACKER_EMBED_PARAMS__=${JSON.stringify(params || {})};<\/script>`;
+  return embeddedHtml.includes('</head>')
+    ? embeddedHtml.replace('</head>', payload + '</head>')
+    : payload + embeddedHtml;
+}
+function renderDailyTrackerFrame(){
+  const frame=vEl('daily-tracker-frame');
+  if(!frame) return;
+  const p=proj();
+  const projectId=p?.id||'';
+  const projectName=p?.name||'';
+  const projectUpdatedAt=p?.updatedAt||'';
+  const trackerUpdatedAt=p?.dailyTracker?.updatedAt||'';
+  const user=currentUser();
+  const userRole=user?.role||'';
+  const userName=user?.username||'';
+  const backendUrl=getSupabaseConfig().url||'';
+  const frameSig=`${projectId}|${projectUpdatedAt}|${trackerUpdatedAt}|${userRole}|${userName}|${backendUrl}`;
+  const embeddedDoc = buildEmbeddedDailyTrackerDoc({
+    projectId,
+    projectName,
+    projectUpdatedAt,
+    trackerUpdatedAt,
+    role:userRole,
+    username:userName,
+    backendUrl
+  });
+  const nextSrc=`/legacy/daily-tracker.html?v=2026-03-31-project-wise&embed=1&projectId=${encodeURIComponent(projectId)}&projectName=${encodeURIComponent(projectName)}&projectUpdatedAt=${encodeURIComponent(projectUpdatedAt)}&trackerUpdatedAt=${encodeURIComponent(trackerUpdatedAt)}&role=${encodeURIComponent(userRole)}&username=${encodeURIComponent(userName)}&backendUrl=${encodeURIComponent(backendUrl)}`;
+  if(frame.dataset.signature!==frameSig){
+    frame.dataset.signature=frameSig;
+    if(embeddedDoc){
+      frame.removeAttribute('src');
+      frame.srcdoc=embeddedDoc;
+    }else{
+      frame.removeAttribute('srcdoc');
+      frame.src=nextSrc;
+    }
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════
 //  RENDER ALL
@@ -2238,7 +2409,7 @@ function renderAll(){
       // Skip modal buttons
       if(b.closest('#mo')) return;
       const pg=curPage;
-      const readOnly=viewer||(pg&&isPageReadOnly(pg));
+      const readOnly=viewer||(pg&&pg!=='projects'&&isPageReadOnly(pg));
       if(readOnly){b.setAttribute('data-viewer-disabled','1');}
       else{b.removeAttribute('data-viewer-disabled');}
     });
@@ -2256,7 +2427,7 @@ function renderAll(){
   },50);
   updateSidebar(); renderProjects(); renderDashboard(); renderWorks();
   renderMilestones(); renderQuotes(); renderPlans(); renderInspections();
-  renderPayments(); renderInvoices(); renderVendorProfiles(); renderVendors(); renderClientContracts(); renderClientInvoices(); renderChecklist(); renderQAQC(); renderCompliance(); renderExport();
+  renderPayments(); renderInvoices(); renderVendorProfiles(); renderVendors(); renderClientContracts(); renderClientInvoices(); renderChecklist(); renderQAQC(); renderCompliance(); renderExport(); renderDailyTrackerFrame();
 }
 
 function updateSidebar(){
@@ -4267,7 +4438,7 @@ function isViewer(){
 
 async function saveModal(){
   if(isViewer()){toast('⚠ Viewers have read-only access');return;}
-  if(curPage&&isPageReadOnly(curPage)){toast('⚠ You have View Only access to this page');return;}
+  if(curPage&&mMode!=='project'&&isPageReadOnly(curPage)){toast('⚠ You have View Only access to this page');return;}
   const p=proj();
   let autoClientInvoiceId='';
   if(mMode==='project'){
@@ -4275,8 +4446,8 @@ async function saveModal(){
     const color=document.querySelector('.cswatch.sel')?.dataset.color||COLORS[0];
     const street=vVal('f-street'),city=vVal('f-city'),state=vVal('f-state'),zip=vVal('f-zip'),county=vVal('f-county');
     const address=[street,city,state,zip].filter(Boolean).join(', ');
-    const o={id:mId||('proj_'+uid()),name,clientOwnerName:vVal('f-client-owner'),clientOwnerEmail:vVal('f-client-owner-email'),street,city,county,state,zip,address,permit:vVal('f-permit'),apn:vVal('f-apn'),type:vVal('f-type'),color,works:[],milestones:[],quotes:[],plans:[],inspections:[],invoices:[],vendors:[],vendorProfiles:[],clientContracts:[],clientInvoices:[],checklist:[],qaqcLog:[]};
-    if(mId){const idx=DB.projects.findIndex(x=>x.id===mId);if(idx>-1){['works','milestones','quotes','plans','inspections','invoices','vendors','vendorProfiles','clientContracts','clientInvoices','checklist','qaqcLog','chkCategories'].forEach(k=>o[k]=DB.projects[idx][k]);DB.projects[idx]=o;}}
+    const o={id:mId||('proj_'+uid()),name,clientOwnerName:vVal('f-client-owner'),clientOwnerEmail:vVal('f-client-owner-email'),street,city,county,state,zip,address,permit:vVal('f-permit'),apn:vVal('f-apn'),type:vVal('f-type'),color,works:[],milestones:[],quotes:[],plans:[],inspections:[],invoices:[],vendors:[],vendorProfiles:[],clientContracts:[],clientInvoices:[],checklist:[],qaqcLog:[],dailyTracker:{days:[],discItems:[]}};
+    if(mId){const idx=DB.projects.findIndex(x=>x.id===mId);if(idx>-1){['works','milestones','quotes','plans','inspections','invoices','vendors','vendorProfiles','clientContracts','clientInvoices','checklist','qaqcLog','chkCategories','dailyTracker'].forEach(k=>o[k]=DB.projects[idx][k]);DB.projects[idx]=o;}}
     else{DB.projects.push(o);DB.activeId=o.id;}
 
   } else if(mMode==='work'&&p){
@@ -7005,7 +7176,7 @@ const ROLES_KEY='livio_roles_v1';
 // ── Permissions ────────────────────────────────────────────────────
 const PERMS_KEY='livio_perms_v1';
 const ALL_PAGES=[
-  {id:'projects',label:'All Projects'},{id:'dashboard',label:'Dashboard'},
+  {id:'projects',label:'All Projects'},{id:'dailytracker',label:'Daily Tracker'},{id:'dashboard',label:'Dashboard'},
   {id:'works',label:'Works at Site'},{id:'milestones',label:'Milestones'},
   {id:'vendorprofiles',label:'Vendor Directory'},{id:'quotes',label:'Quotes'},{id:'plans',label:'Plans & Docs'},
   {id:'inspections',label:'Inspections'},{id:'vendors',label:'Vendor Contracts'},
@@ -7597,6 +7768,14 @@ function doSetupPass(){
 //  INIT
 // ══════════════════════════════════════════════════════════════════
 bindCrossTabAuth();
+window.addEventListener('focus',()=>{
+  if(curPage==='dailytracker') refreshActiveProjectFromSupabase({silent:true});
+});
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden && curPage==='dailytracker'){
+    refreshActiveProjectFromSupabase({silent:true});
+  }
+});
 window.addEventListener('pagehide',()=>{
   const activeProjectId=proj()?.id||DB.activeId||'';
   if(activeProjectId) syncProjectToSupabase(activeProjectId,true);
@@ -7606,6 +7785,7 @@ CURRENT_USER=restoreCurrentUser();
 applyCurrentUserUI(false);
 if(!CURRENT_USER) setTimeout(()=>document.getElementById('login-user')?.focus(),100);
 bootstrapSupabase().finally(()=>{
+  purgeDeprecatedProjects();
   applyCurrentUserUI(false);
   if(!CURRENT_USER) setTimeout(()=>document.getElementById('login-user')?.focus(),100);
 });

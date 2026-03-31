@@ -43,7 +43,7 @@ export function ProjectsPage({
 
   return (
     <>
-      <section className="page-head">
+      <section className="page-head page-head-legacy">
         <div>
           <h1>All Projects</h1>
           <p className="muted">Manage multiple construction sites</p>
@@ -53,56 +53,76 @@ export function ProjectsPage({
         </button>
       </section>
 
-      <section className="card-grid">
+      <section className="projects-grid-legacy">
         {sortedProjects.map((project) => {
           const stats = computeDashboard(project);
           const isActive = project.id === activeProjectId;
+          const locationLine = project.city || project.address || "Cupertino";
+          const countyLine = project.county || "Santa Clara County";
+          const permitLine = project.permit || "--";
 
           return (
             <article
               key={project.id}
-              className={`project-card ${isActive ? "active" : ""}`}
+              className={`project-card legacy-project-card ${isActive ? "active" : ""}`}
               style={{ borderColor: project.color || "#1A6BC4" }}
             >
-              <div className="project-card-bar" style={{ background: project.color || "#1A6BC4" }} />
+              <div
+                className="project-card-bar"
+                style={{ background: project.color || "#1A6BC4" }}
+              />
               <div className="project-card-body">
                 <div className="project-card-top">
                   <div>
                     <div className="project-card-name">{project.name}</div>
-                    <div className="project-card-addr">{project.city || project.address || "No city yet"}</div>
+                    <div className="project-card-addr">{locationLine}</div>
                     <div className="project-card-addr">
-                      {project.county || "No county"} {project.permit ? `| ${project.permit}` : ""}
+                      {countyLine} {"\u00B7"} {permitLine}
                     </div>
                   </div>
-                  <div className="button-row">
-                    <button className="button ghost compact" onClick={() => openEdit(project)}>
-                      Edit
+                  <div className="project-card-tools">
+                    <button
+                      className="project-icon-button"
+                      onClick={() => openEdit(project)}
+                      title="Edit project"
+                      type="button"
+                    >
+                      {"\u270E"}
                     </button>
-                    <button className="button ghost compact danger" onClick={() => onDeleteProject(project.id)}>
-                      Delete
+                    <button
+                      className="project-icon-button danger"
+                      onClick={() => onDeleteProject(project.id)}
+                      title="Delete project"
+                      type="button"
+                    >
+                      {"\u2715"}
                     </button>
                   </div>
                 </div>
               </div>
 
               <div className="project-card-foot">
-                <div className="metric-row">
-                  <div>
+                <div className="metric-row project-metric-row">
+                  <div className="project-metric amber">
                     <strong>{stats.activeWorks}</strong>
                     <span>Active</span>
                   </div>
-                  <div>
+                  <div className="project-metric green">
                     <strong>
                       {stats.completedMilestones}/{stats.totalMilestones}
                     </strong>
                     <span>Milestones</span>
                   </div>
-                  <div>
+                  <div className="project-metric blue">
                     <strong>${stats.totalQuoteAmount.toLocaleString()}</strong>
                     <span>Quoted</span>
                   </div>
                 </div>
-                <button className="button primary compact" onClick={() => setActiveProjectId(project.id)}>
+                <button
+                  className={`project-open-button ${isActive ? "active" : ""}`}
+                  onClick={() => setActiveProjectId(project.id)}
+                  type="button"
+                >
                   {isActive ? "Active" : "Click to open"}
                 </button>
               </div>
@@ -110,7 +130,7 @@ export function ProjectsPage({
           );
         })}
 
-        <button className="add-card" onClick={openCreate}>
+        <button className="add-card legacy-add-card" onClick={openCreate} type="button">
           <div className="add-card-plus">+</div>
           <div>Add New Project</div>
         </button>
