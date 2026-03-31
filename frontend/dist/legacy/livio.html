@@ -2402,6 +2402,7 @@ function nav(page) {
   strip.classList.toggle('show', page==='payments');
   curPage=page;
   scheduleDailyTrackerAutoRefresh();
+  if(page!=='dailytracker') refreshActiveProjectFromSupabase({silent:true});
   renderAll();
 }
 function handleAdd(){ nav(curPage); }
@@ -7858,6 +7859,19 @@ bootstrapSupabase().finally(()=>{
   applyCurrentUserUI(false);
   if(!CURRENT_USER) setTimeout(()=>document.getElementById('login-user')?.focus(),100);
 });
+
+// Re-sync when user switches back to this tab
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden&&CURRENT_USER){
+    const client=initSupabaseClient();
+    if(client) backendRequest('/bootstrap').then(data=>{applyAppSnapshot(data);}).catch(()=>{});
+  }
+});
+
+// Poll every 30s to pick up changes from other devices
+setInterval(()=>{
+  if(!document.hidden&&CURRENT_USER) refreshActiveProjectFromSupabase({silent:true});
+},30000);
 </script>
 </body>
 </html>
