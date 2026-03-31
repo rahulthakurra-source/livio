@@ -511,82 +511,339 @@ th {
   gap: 20px;
 }
 
+.tracker-topbar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 24px;
+  border-radius: 26px;
+  background: #0f1319;
+  border: 1px solid #1f2835;
+  color: #f8fafc;
+}
+
+.tracker-brand,
+.tracker-topbar-actions,
+.tracker-toolbar,
+.tracker-list-actions,
+.tracker-progress,
+.tracker-media-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tracker-brand-badge,
+.tracker-empty-badge {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, #ff8b3d 0%, #ff5e1f 100%);
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.tracker-brand-copy strong {
+  display: block;
+  font-size: 18px;
+}
+
+.tracker-brand-copy span {
+  display: block;
+  margin-top: 4px;
+  color: #97a3b6;
+  font-size: 13px;
+}
+
+.tracker-date-pill,
+.tracker-score-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border-radius: 999px;
+  border: 1px solid #2b3544;
+  background: #171e28;
+  color: #a7b3c6;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0 18px;
+}
+
+.tracker-date-pill {
+  justify-self: center;
+}
+
+.tracker-action {
+  border-radius: 14px;
+  border: 1px solid #2f3b4d;
+  background: #171e28;
+  color: #f8fafc;
+  padding: 11px 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.tracker-action:hover {
+  transform: translateY(-1px);
+}
+
+.tracker-action-primary {
+  border-color: #ff6a2a;
+  background: #ff6a2a;
+  color: #fff;
+}
+
+.tracker-action-ghost {
+  background: #121821;
+  color: #d9e1ee;
+}
+
+.tracker-action-danger {
+  background: transparent;
+  color: #ff8d8d;
+  border-color: #6c3030;
+}
+
+.tracker-action-small {
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.tracker-action.is-active {
+  border-color: #ff8b3d;
+  color: #ffb37c;
+}
+
 .tracker-shell {
+  display: grid;
   grid-template-columns: 320px 1fr;
-  align-items: start;
+  align-items: stretch;
+  gap: 0;
+  overflow: hidden;
+  border-radius: 28px;
+  background: #0f1319;
+  border: 1px solid #1f2835;
+  min-height: 780px;
 }
 
 .tracker-sidebar,
 .tracker-main {
-  background: #fff;
-  border: 1px solid #dce4ee;
-  border-radius: 24px;
-  padding: 18px;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.04);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
 }
 
 .tracker-switch {
+  display: grid;
   grid-template-columns: repeat(2, 1fr);
-  margin-bottom: 16px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #252d38;
 }
 
 .tracker-switch-btn,
 .tracker-tab {
-  border: 1px solid #dce4ee;
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: #f8fbff;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  padding: 16px 18px;
+  background: transparent;
   font-weight: 700;
   cursor: pointer;
+  color: #738097;
 }
 
 .tracker-switch-btn.active,
 .tracker-tab.active {
-  background: #1a6bc4;
-  border-color: #1a6bc4;
-  color: #fff;
+  background: transparent;
+  border-color: #ff6a2a;
+  color: #ff7f40;
 }
 
-.tracker-search {
-  margin-bottom: 14px;
+.tracker-sidebar {
+  padding: 18px 0 0;
+  border-right: 1px solid #252d38;
+  background: #171c24;
+}
+
+.tracker-sidebar-label {
+  padding: 0 20px;
+  margin-bottom: 12px;
+  color: #586477;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+.tracker-search,
+.tracker-remark,
+.tracker-select,
+.tracker-comment-form textarea {
+  width: calc(100% - 40px);
+  margin: 0 20px 16px;
+  border-radius: 14px;
+  border: 1px solid #344054;
+  background: #243042;
+  color: #e7edf7;
+  padding: 14px 16px;
+  outline: none;
+}
+
+.tracker-comment-form textarea {
+  width: 100%;
+  margin: 0 0 14px;
+  resize: vertical;
+  min-height: 100px;
+}
+
+.tracker-search::placeholder,
+.tracker-remark::placeholder,
+.tracker-comment-form textarea::placeholder {
+  color: #72819b;
 }
 
 .tracker-list {
   display: grid;
-  gap: 12px;
-}
-
-.tracker-list-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 10px;
+  gap: 1px;
+  background: #252d38;
+  padding-top: 1px;
 }
 
 .inline-link {
   font-size: 12px;
   font-weight: 700;
-  color: #1a6bc4;
+  color: #c9d3e3;
   cursor: pointer;
 }
 
 .inline-link.danger {
-  color: #c53b3b;
+  color: #ff8d8d;
+}
+
+.tracker-sidebar-empty {
+  padding: 40px 20px 48px;
+  text-align: center;
+  color: #667488;
+}
+
+.tracker-list-card {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 0;
+  background: #1b212a;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tracker-list-card.active {
+  background: #232c38;
+}
+
+.tracker-list-daynum {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: #283446;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: #dae3f1;
+}
+
+.tracker-list-daynum strong {
+  display: block;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.tracker-list-daynum span {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: #90a0b8;
+}
+
+.tracker-list-content strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #fff4ea;
+  font-size: 18px;
+}
+
+.tracker-list-content span,
+.tracker-topic-status {
+  color: #a6b3c7;
+}
+
+.tracker-list-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.tracker-progress {
+  gap: 10px;
+}
+
+.tracker-progress small {
+  color: #7f8da2;
+  min-width: 32px;
+}
+
+.tracker-progress-bar {
+  flex: 1;
+  height: 5px;
+  border-radius: 999px;
+  background: #293446;
+  overflow: hidden;
+}
+
+.tracker-progress-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ff9d59 0%, #ff6a2a 100%);
 }
 
 .tracker-main {
   min-height: 720px;
+  padding: 26px 28px 30px;
+  background: #11161e;
+  color: #eef3fb;
 }
 
 .tracker-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
   margin-bottom: 20px;
 }
 
+.tracker-hero-copy {
+  margin-top: 8px;
+  color: #9fb0c8;
+}
+
 .tracker-tabs {
+  display: grid;
   grid-template-columns: repeat(3, auto);
   justify-content: start;
   margin-bottom: 20px;
+  gap: 10px;
 }
 
 .tracker-section-stack,
@@ -595,27 +852,63 @@ th {
   gap: 16px;
 }
 
+.tracker-toolbar-right {
+  justify-content: flex-end;
+}
+
+.tracker-toolbar-wrap,
+.tracker-topbar-actions,
+.tracker-toolbar {
+  flex-wrap: wrap;
+}
+
 .tracker-card h3 {
   margin-bottom: 6px;
 }
 
+.tracker-card {
+  border: 1px solid #252d38;
+  border-radius: 22px;
+  padding: 22px;
+  background: #1a2029;
+}
+
 .tracker-card p {
-  color: #5f6c7b;
+  color: #97a7bf;
+}
+
+.tracker-main .stat-card {
+  border: 1px solid #252d38;
+  background: #1a2029;
+  color: #eef3fb;
+  box-shadow: none;
+}
+
+.tracker-main .stat-card span,
+.tracker-main .stat-card p {
+  color: #97a7bf;
+}
+
+.tracker-main .stat-card strong {
+  color: #fff;
 }
 
 .tracker-item {
-  border: 1px solid #e4ebf3;
+  border: 1px solid #2a3443;
   border-radius: 16px;
   padding: 14px;
   display: grid;
   gap: 12px;
+  background: #161c24;
 }
 
 .tracker-item.checked {
-  background: #f2fbf5;
+  background: #1f2a24;
+  border-color: #31523d;
 }
 
 .tracker-item-check {
+  display: flex;
   flex-direction: row;
   align-items: center;
   gap: 12px;
@@ -624,6 +917,11 @@ th {
 .tracker-item-check input {
   width: 18px;
   height: 18px;
+  accent-color: #ff7a3c;
+}
+
+.tracker-item-check span {
+  color: #f5f7fb;
 }
 
 .tracker-item-controls {
@@ -631,37 +929,54 @@ th {
   align-items: center;
 }
 
-.tracker-remark {
-  width: 100%;
+.tracker-points-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: #133c24;
+  color: #63df8e;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .tracker-select {
   min-width: 220px;
+  width: auto;
+  margin: 0;
+}
+
+.tracker-remark {
+  width: 100%;
+  margin: 0;
 }
 
 .tracker-media-group {
-  border: 1px solid #e4ebf3;
+  border: 1px solid #283140;
   border-radius: 18px;
   padding: 16px;
-  background: #fbfdff;
+  background: #151a22;
 }
 
 .tracker-media-grid {
+  display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .tracker-media-card {
-  border: 1px solid #dce4ee;
+  border: 1px solid #273140;
   border-radius: 16px;
   overflow: hidden;
-  background: #fff;
+  background: #1a2029;
 }
 
 .tracker-media-thumb {
   width: 100%;
   padding: 0;
   border: 0;
-  background: #0f172a;
+  background: #0d1117;
   cursor: pointer;
 }
 
@@ -676,6 +991,7 @@ th {
   grid-template-columns: 1fr auto;
   align-items: center;
   padding: 12px;
+  color: #d7e0ef;
 }
 
 .tracker-comments {
@@ -685,25 +1001,65 @@ th {
 }
 
 .tracker-comment {
-  border: 1px solid #e4ebf3;
+  border: 1px solid #273140;
   border-radius: 16px;
   padding: 14px;
-  background: #f8fbff;
+  background: #161d26;
 }
 
 .tracker-comment span {
   display: block;
   margin-top: 4px;
-  color: #64748b;
+  color: #91a2ba;
   font-size: 12px;
 }
 
 .tracker-comment p {
   margin-top: 8px;
+  color: #e7edf7;
 }
 
-.tracker-comment-form textarea {
-  margin-bottom: 12px;
+.tracker-main .table-wrap {
+  border: 1px solid #252d38;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.tracker-main table {
+  background: #141920;
+  color: #eaf0f8;
+}
+
+.tracker-main th {
+  background: #1b222d;
+  color: #8fa0b9;
+  border-bottom-color: #252d38;
+}
+
+.tracker-main td {
+  border-bottom-color: #252d38;
+}
+
+.tracker-main .empty-state {
+  border: 1px dashed #334055;
+  border-radius: 16px;
+  background: #131920;
+  color: #8192aa;
+}
+
+.tracker-empty-hero {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+  text-align: center;
+  color: #d9e2ef;
+  padding: 48px 20px;
+}
+
+.tracker-empty-hero p {
+  color: #8fa0b9;
 }
 
 .tracker-lightbox {

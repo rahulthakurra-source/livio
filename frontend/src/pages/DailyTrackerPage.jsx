@@ -55,6 +55,28 @@ function formatDateLabel(value) {
   });
 }
 
+function formatShortDateLabel(value) {
+  if (!value) return "No date";
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+  });
+}
+
+function formatTopbarDate(value) {
+  if (!value) return "";
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function toDateInputValue(value) {
   if (value) return value;
   return new Date().toISOString().slice(0, 10);
@@ -669,6 +691,24 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
     );
   }
 
+  function exportTracker() {
+    const payload = {
+      projectId: project.id,
+      projectName: project.name,
+      exportedAt: new Date().toISOString(),
+      dailyTracker: tracker,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-daily-tracker.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   const filteredDays = tracker.days.filter((day) => {
     const query = daySearch.trim().toLowerCase();
     if (!query) return true;
@@ -698,32 +738,39 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
       )
     : [];
 
+  const topbarDate = formatTopbarDate(
+    selectedDay?.date || selectedDiscussion?.date || toDateInputValue(),
+  );
+
   return (
     <div className="tracker-page">
-      <section className="page-head">
-        <div>
-          <div className="eyebrow">Daily Tracker</div>
-          <h1>{project.name}</h1>
-          <p className="muted">
-            Native React daily site tracking with project-wise days, checklist categories, media,
-            and discussion topics.
-          </p>
+      <section className="tracker-topbar">
+        <div className="tracker-brand">
+          <div className="tracker-brand-badge">DT</div>
+          <div className="tracker-brand-copy">
+            <strong>DailyTracker</strong>
+            <span>{project.name}</span>
+          </div>
         </div>
-        <div className="button-row">
+        <div className="tracker-date-pill">{topbarDate}</div>
+        <div className="tracker-topbar-actions">
+          <button className="tracker-action tracker-action-ghost" onClick={exportTracker}>
+            Export
+          </button>
           {sideView === "days" ? (
-            <button className="button primary" onClick={addDay}>
-              Add day
+            <button className="tracker-action tracker-action-primary" onClick={addDay}>
+              + New Day
             </button>
           ) : (
-            <button className="button primary" onClick={addDiscussion}>
-              Add discussion
+            <button className="tracker-action tracker-action-primary" onClick={addDiscussion}>
+              + New Topic
             </button>
           )}
         </div>
       </section>
 
       {error ? <div className="status-banner warn">{error}</div> : null}
-      {saving ? <div className="status-banner ok">Saving Daily Tracker changes…</div> : null}
+      {saving ? <div className="status-banner ok">Saving Daily Tracker changes...</div> : null}
 
       <div className="tracker-shell">
         <aside className="tracker-sidebar">
@@ -744,9 +791,10 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
 
           {sideView === "days" ? (
             <>
+              <div className="tracker-sidebar-label">Daily Site Log</div>
               <input
                 className="tracker-search"
-                placeholder="Search days"
+                placeholder="Search by date, site, site lead..."
                 value={daySearch}
                 onChange={(event) => setDaySearch(event.target.value)}
               />
@@ -763,13 +811,20 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                           setDayTab("checklist");
                         }}
                       >
-                        <div>
-                          <strong>{formatDateLabel(day.date)}</strong>
-                          <span>{day.location || "Site"}</span>
+                        <div className="tracker-list-daynum">
+                          <strong>{day.dayNum}</strong>
+                          <span>DAY</span>
                         </div>
-                        <div className="tracker-list-meta">
-                          <span>{score.pct}%</span>
-                          <div className="button-row">
+                        <div className="tracker-list-content">
+                          <strong>{formatShortDateLabel(day.date)}</strong>
+                          <div className="tracker-progress">
+                            <div className="tracker-progress-bar">
+                              <span style={{ width: `${score.pct}%` }} />
+                            </div>
+                            <small>{score.pct}%</small>
+                          </div>
+                        </div>
+                        <div className="tracker-list-actions">
                             <span
                               className="inline-link"
                               onClick={(event) => {
@@ -788,21 +843,21 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                             >
                               Delete
                             </span>
-                          </div>
                         </div>
                       </button>
                     );
                   })
                 ) : (
-                  <div className="empty-state">No days yet.</div>
+                  <div className="tracker-sidebar-empty">No days yet</div>
                 )}
               </div>
             </>
           ) : (
             <>
+              <div className="tracker-sidebar-label">Discussion Items</div>
               <input
                 className="tracker-search"
-                placeholder="Search discussions"
+                placeholder="Search topics..."
                 value={discussionSearch}
                 onChange={(event) => setDiscussionSearch(event.target.value)}
               />
@@ -814,11 +869,15 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                       className={`tracker-list-card ${selectedDiscussionId === item.id ? "active" : ""}`}
                       onClick={() => setSelectedDiscussionId(item.id)}
                     >
-                      <div>
-                        <strong>{item.title}</strong>
-                        <span>{item.status}</span>
+                      <div className="tracker-list-daynum">
+                        <strong>#{item.num}</strong>
+                        <span>TOPIC</span>
                       </div>
-                      <div className="button-row">
+                      <div className="tracker-list-content">
+                        <strong>{item.title}</strong>
+                        <span className="tracker-topic-status">{item.status}</span>
+                      </div>
+                      <div className="tracker-list-actions">
                         <span
                           className="inline-link"
                           onClick={(event) => {
@@ -841,7 +900,7 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                     </button>
                   ))
                 ) : (
-                  <div className="empty-state">No discussion topics yet.</div>
+                  <div className="tracker-sidebar-empty">No discussion topics yet</div>
                 )}
               </div>
             </>
@@ -854,18 +913,24 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
               <>
                 <section className="tracker-hero">
                   <div>
-                    <div className="eyebrow">Site day</div>
+                    <div className="eyebrow">Daily Site Work Review</div>
                     <h2>{formatDateLabel(selectedDay.date)}</h2>
-                    <p className="muted">
-                      {selectedDay.location || "No site/location added"} ·{" "}
+                    <p className="tracker-hero-copy">
+                      {selectedDay.location || "No site/location added"} |{" "}
                       {selectedDay.staff || "No site lead yet"}
                     </p>
                   </div>
-                  <div className="button-row">
-                    <button className="button ghost" onClick={() => editDay(selectedDay.id)}>
+                  <div className="tracker-toolbar">
+                    <button
+                      className="tracker-action tracker-action-ghost"
+                      onClick={() => editDay(selectedDay.id)}
+                    >
                       Edit day
                     </button>
-                    <button className="button ghost danger" onClick={() => deleteDay(selectedDay.id)}>
+                    <button
+                      className="tracker-action tracker-action-danger"
+                      onClick={() => deleteDay(selectedDay.id)}
+                    >
                       Delete day
                     </button>
                   </div>
@@ -886,7 +951,7 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                   </article>
                   <article className="stat-card">
                     <span>Site lead / staff</span>
-                    <strong>{selectedDay.staff || "—"}</strong>
+                    <strong>{selectedDay.staff || "-"}</strong>
                     <p>Assigned on this day</p>
                   </article>
                 </section>
@@ -914,8 +979,8 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
 
                 {dayTab === "checklist" ? (
                   <div className="tracker-section-stack">
-                    <div className="button-row align-end">
-                      <button className="button ghost" onClick={addChecklistCategory}>
+                    <div className="tracker-toolbar tracker-toolbar-right">
+                      <button className="tracker-action tracker-action-ghost" onClick={addChecklistCategory}>
                         Add category
                       </button>
                     </div>
@@ -937,20 +1002,26 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                                 {checked}/{items.length} complete
                               </p>
                             </div>
-                            <div className="button-row wrap">
-                              <button className="button ghost" onClick={() => addChecklistItem(section.key)}>
+                            <div className="tracker-toolbar tracker-toolbar-wrap">
+                              <button
+                                className="tracker-action tracker-action-ghost"
+                                onClick={() => addChecklistItem(section.key)}
+                              >
                                 Add item
                               </button>
-                              <button className="button ghost" onClick={() => editChecklistCategory(section.key)}>
+                              <button
+                                className="tracker-action tracker-action-ghost"
+                                onClick={() => editChecklistCategory(section.key)}
+                              >
                                 Edit category
                               </button>
                               <button
-                                className="button ghost danger"
+                                className="tracker-action tracker-action-danger"
                                 onClick={() => deleteChecklistCategory(section.key)}
                               >
                                 Delete category
                               </button>
-                              <span className="pill">{pct}%</span>
+                              <span className="tracker-score-pill">{pct}%</span>
                             </div>
                           </div>
 
@@ -973,9 +1044,11 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                                       <span>{item.text}</span>
                                     </label>
                                     <div className="tracker-item-controls">
-                                      <span className="pill">+{item.pts} pts</span>
+                                      <span className="tracker-points-pill">+{item.pts} pts</span>
                                       <button
-                                        className={`button ghost compact ${state === "na" ? "active" : ""}`}
+                                        className={`tracker-action tracker-action-ghost tracker-action-small ${
+                                          state === "na" ? "is-active" : ""
+                                        }`}
                                         onClick={() =>
                                           state === "na"
                                             ? clearChecklistState(item.id)
@@ -984,11 +1057,14 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                                       >
                                         N/A
                                       </button>
-                                      <button className="button ghost compact" onClick={() => editChecklistItem(section.key, item.id)}>
+                                      <button
+                                        className="tracker-action tracker-action-ghost tracker-action-small"
+                                        onClick={() => editChecklistItem(section.key, item.id)}
+                                      >
                                         Edit item
                                       </button>
                                       <button
-                                        className="button ghost compact danger"
+                                        className="tracker-action tracker-action-danger tracker-action-small"
                                         onClick={() => deleteChecklistItem(section.key, item.id)}
                                       >
                                         Delete item
@@ -1021,7 +1097,7 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                           <h3>Category-wise media</h3>
                           <p>Categories come directly from the checklist for this day.</p>
                         </div>
-                        <div className="button-row wrap">
+                        <div className="tracker-toolbar tracker-toolbar-wrap">
                           <select
                             className="tracker-select"
                             value={getMediaDraftCategory(selectedDay)}
@@ -1033,7 +1109,7 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                               </option>
                             ))}
                           </select>
-                          <button className="button primary" onClick={openUpload}>
+                          <button className="tracker-action tracker-action-primary" onClick={openUpload}>
                             Upload pictures
                           </button>
                         </div>
@@ -1065,7 +1141,7 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                                     <div className="tracker-media-row">
                                       <span>{item.name}</span>
                                       <button
-                                        className="button ghost compact danger"
+                                        className="tracker-action tracker-action-danger tracker-action-small"
                                         onClick={() => removeMedia(item.id)}
                                       >
                                         Delete
@@ -1095,7 +1171,7 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                                   <div className="tracker-media-row">
                                     <span>{item.name}</span>
                                     <button
-                                      className="button ghost compact danger"
+                                      className="tracker-action tracker-action-danger tracker-action-small"
                                       onClick={() => removeMedia(item.id)}
                                     >
                                       Delete
@@ -1133,8 +1209,8 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                           {tracker.days.map((day) => (
                             <tr key={day.id}>
                               <td>{formatDateLabel(day.date)}</td>
-                              <td>{day.location || "—"}</td>
-                              <td>{day.staff || "—"}</td>
+                              <td>{day.location || "-"}</td>
+                              <td>{day.staff || "-"}</td>
                               <td>{scoreDay(day).pct}%</td>
                             </tr>
                           ))}
@@ -1145,7 +1221,14 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                 ) : null}
               </>
             ) : (
-              <div className="empty-state large">Add a day to start tracking daily site work.</div>
+              <div className="tracker-empty-hero">
+                <div className="tracker-empty-badge">SITE</div>
+                <h2>No day selected</h2>
+                <p>Add or select a site day to begin.</p>
+                <button className="tracker-action tracker-action-primary" onClick={addDay}>
+                  + Add First Day
+                </button>
+              </div>
             )
           ) : selectedDiscussion ? (
             <div className="tracker-section-stack">
@@ -1154,15 +1237,20 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                   <div>
                     <div className="eyebrow">Discussion</div>
                     <h2>{selectedDiscussion.title}</h2>
-                    <p className="muted">{selectedDiscussion.notes || "No notes added yet."}</p>
+                    <p className="tracker-hero-copy">
+                      {selectedDiscussion.notes || "No notes added yet."}
+                    </p>
                   </div>
-                  <div className="button-row">
-                    <span className="pill">{selectedDiscussion.status}</span>
-                    <button className="button ghost" onClick={() => editDiscussion(selectedDiscussion.id)}>
+                  <div className="tracker-toolbar tracker-toolbar-wrap">
+                    <span className="tracker-score-pill">{selectedDiscussion.status}</span>
+                    <button
+                      className="tracker-action tracker-action-ghost"
+                      onClick={() => editDiscussion(selectedDiscussion.id)}
+                    >
                       Edit topic
                     </button>
                     <button
-                      className="button ghost danger"
+                      className="tracker-action tracker-action-danger"
                       onClick={() => deleteDiscussion(selectedDiscussion.id)}
                     >
                       Delete topic
@@ -1195,14 +1283,21 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                   }}
                 >
                   <textarea name="comment" rows={3} placeholder="Add a dated comment to this topic" />
-                  <button className="button primary" type="submit">
+                  <button className="tracker-action tracker-action-primary" type="submit">
                     Add comment
                   </button>
                 </form>
               </article>
             </div>
           ) : (
-            <div className="empty-state large">Add a discussion topic to start project conversations.</div>
+            <div className="tracker-empty-hero">
+              <div className="tracker-empty-badge">TOPIC</div>
+              <h2>No discussion selected</h2>
+              <p>Add or select a topic to start project conversations.</p>
+              <button className="tracker-action tracker-action-primary" onClick={addDiscussion}>
+                + Add First Topic
+              </button>
+            </div>
           )}
         </section>
       </div>
