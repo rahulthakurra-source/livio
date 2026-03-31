@@ -71,7 +71,7 @@ export function ProjectsPage({
                     <div className="project-card-name">{project.name}</div>
                     <div className="project-card-addr">{project.city || project.address || "No city yet"}</div>
                     <div className="project-card-addr">
-                      {project.county || "No county"} {project.permit ? `· ${project.permit}` : ""}
+                      {project.county || "No county"} {project.permit ? `| ${project.permit}` : ""}
                     </div>
                   </div>
                   <div className="button-row">

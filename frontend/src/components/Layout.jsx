@@ -66,9 +66,25 @@ export function Layout({
         </div>
 
         <div className="sidebar-footer">
-          <div className="pill">Signed in as {user?.username}</div>
-          <div className="pill">Role: {user?.role}</div>
-          <button className="button ghost" onClick={onLogout}>
+          <div className="sidebar-foot-meta">
+            {activeProject ? (
+              <>
+                <div>
+                  {activeProject.city || ""}
+                  {activeProject.county ? ` | ${activeProject.county}` : ""}
+                </div>
+                <div>Permit: {activeProject.permit || "-"}</div>
+                <div>APN: {activeProject.apn || "-"}</div>
+              </>
+            ) : (
+              <div>No project selected</div>
+            )}
+          </div>
+          <div className="sidebar-foot-user">
+            <span>{user?.username}</span>
+            <span>{user?.role}</span>
+          </div>
+          <button className="button ghost compact" onClick={onLogout}>
             Sign out
           </button>
         </div>
