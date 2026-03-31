@@ -1,5 +1,6 @@
 export const PAGE_DEFINITIONS = [
   { id: "projects", label: "Projects", type: "root" },
+  { id: "dailyTracker", label: "Daily Tracker", type: "dailyTracker" },
   { id: "dashboard", label: "Dashboard", type: "dashboard" },
   { id: "works", label: "Works", type: "section", sectionKey: "works" },
   { id: "milestones", label: "Milestones", type: "section", sectionKey: "milestones" },
@@ -15,6 +16,66 @@ export const PAGE_DEFINITIONS = [
   { id: "export", label: "Export", type: "export" },
   { id: "users", label: "Users", type: "users", adminOnly: true },
 ];
+
+export const PROJECT_COLLECTION_DEFAULTS = {
+  works: [],
+  milestones: [],
+  quotes: [],
+  plans: [],
+  inspections: [],
+  invoices: [],
+  vendors: [],
+  clientContracts: [],
+  clientInvoices: [],
+  checklist: [],
+  qaqcLog: [],
+  chkCategories: [],
+};
+
+export const DAILY_TRACKER_DEFAULT = {
+  days: [],
+  discussions: [],
+};
+
+export function normalizeDailyTracker(tracker = {}) {
+  const nextTracker = {
+    ...DAILY_TRACKER_DEFAULT,
+    ...(tracker && typeof tracker === "object" ? tracker : {}),
+  };
+
+  nextTracker.days = Array.isArray(nextTracker.days) ? nextTracker.days : [];
+  nextTracker.discussions = Array.isArray(nextTracker.discussions) ? nextTracker.discussions : [];
+
+  return nextTracker;
+}
+
+export function normalizeProject(project = {}) {
+  const nextProject = {
+    id: project.id || "",
+    name: project.name || "Untitled Project",
+    street: project.street || "",
+    city: project.city || "",
+    county: project.county || "",
+    state: project.state || "CA",
+    zip: project.zip || "",
+    address: project.address || "",
+    permit: project.permit || "",
+    apn: project.apn || "",
+    type: project.type || "",
+    color: project.color || "#1A6BC4",
+    createdAt: project.createdAt || "",
+    updatedAt: project.updatedAt || "",
+    ...project,
+  };
+
+  Object.keys(PROJECT_COLLECTION_DEFAULTS).forEach((key) => {
+    nextProject[key] = Array.isArray(nextProject[key]) ? nextProject[key] : [];
+  });
+
+  nextProject.dailyTracker = normalizeDailyTracker(nextProject.dailyTracker);
+
+  return nextProject;
+}
 
 export const SECTION_CONFIGS = {
   works: {
