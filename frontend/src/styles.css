@@ -46,16 +46,17 @@ textarea {
 .sidebar {
   background: #0c1b2e;
   color: #fff;
-  padding: 24px 20px;
+  padding: 22px 12px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 18px;
+  overflow-y: auto;
 }
 
 .brand-mark {
-  font-size: 28px;
+  font-size: 18px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
 }
 
 .brand-sub {
@@ -65,28 +66,93 @@ textarea {
   line-height: 1.5;
 }
 
+.sidebar-brand {
+  padding: 4px 4px 12px;
+}
+
+.sidebar-section {
+  display: grid;
+  gap: 10px;
+}
+
+.sidebar-label {
+  padding: 0 8px;
+  color: #557298;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.active-project-card {
+  margin: 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 14px 16px;
+  color: #fff;
+}
+
 .nav-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .nav-link {
   width: 100%;
   border: 0;
   border-radius: 12px;
-  padding: 12px 14px;
+  padding: 12px 12px;
   background: transparent;
   color: rgba(255, 255, 255, 0.84);
   text-align: left;
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .nav-link:hover,
 .nav-link.active {
-  background: rgba(255, 255, 255, 0.1);
+  background: #16395f;
   color: #fff;
+}
+
+.nav-link-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.nav-link-icon {
+  width: 24px;
+  text-align: center;
+  font-weight: 800;
+  flex: 0 0 24px;
+}
+
+.nav-link-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #c9d6e7;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .sidebar-footer {
@@ -94,6 +160,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding: 8px 4px 0;
 }
 
 .main-panel {

@@ -270,6 +270,7 @@ export default function App() {
       user={user}
       page={page}
       setPage={(nextPage) => startTransition(() => setPage(nextPage))}
+      projects={projects}
       activeProject={activeProject}
       onLogout={handleLogout}
     >

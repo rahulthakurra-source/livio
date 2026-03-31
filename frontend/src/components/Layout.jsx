@@ -4,6 +4,7 @@ export function Layout({
   user,
   page,
   setPage,
+  projects,
   activeProject,
   onLogout,
   children,
@@ -12,14 +13,34 @@ export function Layout({
     (entry) => !entry.adminOnly || user?.role === "Admin",
   );
 
+  function getCount(entry) {
+    if (entry.type === "root") return projects?.length || 0;
+    if (!activeProject) return 0;
+    if (entry.type === "dailyTracker") return activeProject.dailyTracker?.days?.length || 0;
+    if (entry.type === "dashboard" || entry.type === "payments" || entry.type === "compliance" || entry.type === "export") {
+      return "";
+    }
+    const list = activeProject[entry.sectionKey];
+    return Array.isArray(list) ? list.length : 0;
+  }
+
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div>
-          <div className="brand-mark">LIVIO</div>
-          <p className="brand-sub">React migration with project-row storage</p>
+        <div className="sidebar-brand">
+          <div className="brand-mark">LIVIO LEGACY AI</div>
+          <p className="brand-sub">Construction management workspace</p>
         </div>
 
+        <div className="sidebar-section">
+          <div className="sidebar-label">Active Project</div>
+          <div className="active-project-card">
+            <strong>{activeProject?.name || "No active project"}</strong>
+          </div>
+        </div>
+
+        <div className="sidebar-section">
+          <div className="sidebar-label">Pages</div>
         <nav className="nav-list">
           {visiblePages.map((entry) => (
             <button
@@ -27,19 +48,19 @@ export function Layout({
               className={`nav-link ${page === entry.id ? "active" : ""}`}
               onClick={() => setPage(entry.id)}
             >
-              {entry.label}
+              <span className="nav-link-main">
+                <span className="nav-link-icon">{entry.icon || "•"}</span>
+                <span className="nav-link-label">{entry.label}</span>
+              </span>
+              {getCount(entry) !== "" ? <span className="nav-count">{getCount(entry)}</span> : null}
             </button>
           ))}
         </nav>
+        </div>
 
         <div className="sidebar-footer">
           <div className="pill">Signed in as {user?.username}</div>
           <div className="pill">Role: {user?.role}</div>
-          {activeProject ? (
-            <div className="pill pill-active">Project: {activeProject.name}</div>
-          ) : (
-            <div className="pill">No active project</div>
-          )}
           <button className="button ghost" onClick={onLogout}>
             Sign out
           </button>
