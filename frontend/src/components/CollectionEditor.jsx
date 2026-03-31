@@ -105,9 +105,7 @@ export function CollectionEditor({
         <div className="panel-head">
           <div>
             <h2>{selectedItem ? config.itemTitle : "Select an item"}</h2>
-            <p>
-              This keeps the current nested project data shape while the app is moved to React.
-            </p>
+            <p>Edit the selected item and save changes for this project.</p>
           </div>
           <button className="button primary" onClick={handleSave}>
             Save section

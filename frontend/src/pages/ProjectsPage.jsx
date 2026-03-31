@@ -45,14 +45,11 @@ export function ProjectsPage({
     <>
       <section className="page-head">
         <div>
-          <div className="eyebrow">Projects</div>
-          <h1>Project library</h1>
-          <p className="muted">
-            Each project now lives in its own database row instead of one shared snapshot.
-          </p>
+          <h1>All Projects</h1>
+          <p className="muted">Manage multiple construction sites</p>
         </div>
         <button className="button primary" onClick={openCreate}>
-          New project
+          + New Project
         </button>
       </section>
 
@@ -71,16 +68,28 @@ export function ProjectsPage({
               <div className="project-card-body">
                 <div className="project-card-top">
                   <div>
-                    <h2>{project.name}</h2>
-                    <p>{project.address || project.city || "No address yet"}</p>
+                    <div className="project-card-name">{project.name}</div>
+                    <div className="project-card-addr">{project.city || project.address || "No city yet"}</div>
+                    <div className="project-card-addr">
+                      {project.county || "No county"} {project.permit ? `· ${project.permit}` : ""}
+                    </div>
                   </div>
-                  <span className="pill">{project.permit || "No permit"}</span>
+                  <div className="button-row">
+                    <button className="button ghost compact" onClick={() => openEdit(project)}>
+                      Edit
+                    </button>
+                    <button className="button ghost compact danger" onClick={() => onDeleteProject(project.id)}>
+                      Delete
+                    </button>
+                  </div>
                 </div>
+              </div>
 
+              <div className="project-card-foot">
                 <div className="metric-row">
                   <div>
                     <strong>{stats.activeWorks}</strong>
-                    <span>Active works</span>
+                    <span>Active</span>
                   </div>
                   <div>
                     <strong>
@@ -93,22 +102,18 @@ export function ProjectsPage({
                     <span>Quoted</span>
                   </div>
                 </div>
-
-                <div className="button-row">
-                  <button className="button primary" onClick={() => setActiveProjectId(project.id)}>
-                    {isActive ? "Active" : "Open"}
-                  </button>
-                  <button className="button ghost" onClick={() => openEdit(project)}>
-                    Edit
-                  </button>
-                  <button className="button ghost" onClick={() => onDeleteProject(project.id)}>
-                    Delete
-                  </button>
-                </div>
+                <button className="button primary compact" onClick={() => setActiveProjectId(project.id)}>
+                  {isActive ? "Active" : "Click to open"}
+                </button>
               </div>
             </article>
           );
         })}
+
+        <button className="add-card" onClick={openCreate}>
+          <div className="add-card-plus">+</div>
+          <div>Add New Project</div>
+        </button>
       </section>
 
       <ProjectFormDialog

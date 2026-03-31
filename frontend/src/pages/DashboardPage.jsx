@@ -24,8 +24,7 @@ export function DashboardPage({ project, onSaveProject }) {
     <>
       <section className="page-head">
         <div>
-          <div className="eyebrow">Dashboard</div>
-          <h1>{project.name}</h1>
+          <h1>Dashboard Overview</h1>
           <p className="muted">{project.address || "Add an address to complete this project."}</p>
         </div>
       </section>
@@ -57,7 +56,7 @@ export function DashboardPage({ project, onSaveProject }) {
         <div className="panel-head">
           <div>
             <h2>Project metadata</h2>
-            <p>These top-level fields are stored as columns in the `projects` table.</p>
+            <p>Top-level project fields and site information.</p>
           </div>
         </div>
         <div className="form-grid">
@@ -87,7 +86,7 @@ export function DashboardPage({ project, onSaveProject }) {
         <div className="panel-head">
           <div>
             <h2>Section inventory</h2>
-            <p>The nested arrays still travel with the project, now inside the row’s `data` JSON.</p>
+            <p>Current project record counts across each section.</p>
           </div>
         </div>
         <div className="card-grid compact">
