@@ -1519,38 +1519,12 @@ function normalizeDB(input){
   });
   return db;
 }
-const LOCAL_DB_KEY = 'livio_local_db_v1';
-const LOCAL_APP_SNAPSHOT_KEY = 'livio_local_app_snapshot_v1';
-function readLocalDBCache(){
-  try{
-    const raw=localStorage.getItem(LOCAL_DB_KEY);
-    if(!raw) return null;
-    return normalizeDB(JSON.parse(raw));
-  }catch(e){
-    console.warn('local DB cache read failed:',e);
-    return null;
-  }
-}
-function writeLocalDBCache(db){
-  try{
-    localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(normalizeDB(db)));
-  }catch(e){
-    console.warn('local DB cache write failed:',e);
-  }
-}
+function writeLocalDBCache(){}
 function loadDB(){
-  return readLocalDBCache() || normalizeDB(defaultDB());
+  return normalizeDB(defaultDB());
 }
 function readLocalAppSnapshot(){
-  try{
-    const raw=localStorage.getItem(LOCAL_APP_SNAPSHOT_KEY);
-    if(!raw) return null;
-    const parsed=JSON.parse(raw);
-    return parsed&&typeof parsed==='object' ? parsed : null;
-  }catch(e){
-    console.warn('local app snapshot read failed:',e);
-    return null;
-  }
+  return null;
 }
 function getLocalSnapshotSavedAt(){
   const snapshot=readLocalAppSnapshot();
@@ -1652,23 +1626,10 @@ function writeAuthSessionCookie(value){
 }
 function persistCurrentUser(){
   try{
-    if(CURRENT_USER){
-      const payload=JSON.stringify(CURRENT_USER);
-      localStorage.setItem(AUTH_SESSION_KEY, payload);
-      sessionStorage.setItem(AUTH_SESSION_KEY, payload);
-      writeAuthSessionCookie(CURRENT_USER);
-    }else{
-      localStorage.removeItem(AUTH_SESSION_KEY);
-      sessionStorage.removeItem(AUTH_SESSION_KEY);
-      writeAuthSessionCookie(null);
-    }
+    writeAuthSessionCookie(CURRENT_USER||null);
   }catch(_e){}
 }
 function notifyAuthTabs(type){
-  try{
-    const payload=JSON.stringify({type,ts:Date.now()});
-    localStorage.setItem(AUTH_SYNC_KEY, payload);
-  }catch(_e){}
   try{
     if(typeof BroadcastChannel==='function'){
       if(!authChannel) authChannel=new BroadcastChannel(AUTH_SYNC_KEY);
@@ -1688,18 +1649,6 @@ function applyLoggedOutState(fromSync=false){
   if(fromSync) toast('Logged out in another tab');
 }
 function bindCrossTabAuth(){
-  window.addEventListener('storage',event=>{
-    if(event.key===AUTH_SESSION_KEY&&event.newValue===null&&CURRENT_USER){
-      applyLoggedOutState(true);
-      return;
-    }
-    if(event.key===AUTH_SYNC_KEY&&CURRENT_USER){
-      try{
-        const payload=event.newValue?JSON.parse(event.newValue):null;
-        if(payload&&payload.type==='logout') applyLoggedOutState(true);
-      }catch(_e){}
-    }
-  });
   try{
     if(typeof BroadcastChannel==='function'){
       if(!authChannel) authChannel=new BroadcastChannel(AUTH_SYNC_KEY);
@@ -1711,21 +1660,10 @@ function bindCrossTabAuth(){
 }
 function restoreCurrentUser(){
   try{
-    const sources=[
-      ()=>localStorage.getItem(AUTH_SESSION_KEY),
-      ()=>sessionStorage.getItem(AUTH_SESSION_KEY),
-      ()=>readCookie(AUTH_SESSION_COOKIE)
-    ];
-    for(const getRaw of sources){
-      const raw=getRaw();
-      if(!raw) continue;
-      const parsed=normalizeAuthSession(JSON.parse(raw));
-      if(parsed){
-        CURRENT_USER=parsed;
-        persistCurrentUser();
-        return parsed;
-      }
-    }
+    const raw=readCookie(AUTH_SESSION_COOKIE);
+    if(!raw) return null;
+    const parsed=normalizeAuthSession(JSON.parse(raw));
+    if(parsed){ CURRENT_USER=parsed; persistCurrentUser(); return parsed; }
     return null;
   }catch(_e){
     return null;
@@ -2118,21 +2056,7 @@ function buildAppSnapshot(){
     savedAt:new Date().toISOString()
   };
 }
-function writeLocalAppSnapshot(snapshot){
-  try{
-    const payload={
-      db:normalizeDB(snapshot&&snapshot.db||DB),
-      users:((snapshot&&snapshot.users)||APP_STATE.users||DEFAULT_USERS).map(normalizeUserRecord),
-      roles:[...((snapshot&&snapshot.roles)||APP_STATE.roles||DEFAULT_ROLES)],
-      perms:JSON.parse(JSON.stringify((snapshot&&snapshot.perms)||APP_STATE.perms||{})),
-      resets:JSON.parse(JSON.stringify((snapshot&&snapshot.resets)||APP_STATE.resets||{})),
-      savedAt:String(snapshot&&snapshot.savedAt||new Date().toISOString())
-    };
-    localStorage.setItem(LOCAL_APP_SNAPSHOT_KEY, JSON.stringify(payload));
-  }catch(e){
-    console.warn('local app snapshot write failed:',e);
-  }
-}
+function writeLocalAppSnapshot(){}
 function markLocalAppStateSaved(savedAt=new Date().toISOString()){
   writeLocalAppSnapshot({
     db:DB,
