@@ -910,6 +910,7 @@ let days = Array.isArray(parentTrackerState?.days) ? clone(parentTrackerState.da
 let discItems = Array.isArray(parentTrackerState?.discItems)
   ? clone(parentTrackerState.discItems)
   : (PROJECT_ID === 'standalone' ? clone(DISC_SEED) : []);
+const remarkDrafts = {};
 let curDay = null;
 let editingDayId = null;
 let curDiscId = null;
@@ -964,6 +965,16 @@ if(!parentTrackerState && (days.length || discItems.length)){
 }
 const getDay = id => days.find(d=>d.id===id);
 const getDisc = id => discItems.find(d=>d.id===id);
+function getRemarkDraft(dayId, itemId){
+  const key = `${dayId || ''}::${itemId || ''}`;
+  if(Object.prototype.hasOwnProperty.call(remarkDrafts, key)) return remarkDrafts[key];
+  const day = getDay(dayId);
+  return day?.comments?.[itemId] || '';
+}
+function setRemarkDraft(itemId, value){
+  if(!curDay || !itemId) return;
+  remarkDrafts[`${curDay}::${itemId}`] = value;
+}
 const esc = s => (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 
 // ── SIDEBAR VIEW SWITCHING ──
@@ -1508,14 +1519,14 @@ function buildCL(day){
     const chk=sectionItems.filter(i=>day.checks?.[i.id]==='checked').length;
     const pct=tot?Math.round((chk/tot)*100):0;
     const items=sectionItems.length?sectionItems.map(item=>{
-      const st=day.checks?.[item.id]||'none',cm=day.comments?.[item.id]||'',h=getHist(item.id,curDay);
+      const st=day.checks?.[item.id]||'none',cm=getRemarkDraft(day.id,item.id),h=getHist(item.id,curDay);
       return `<div class="ci ${st==='checked'?'ck':''} ${st==='na'?'na':''}" id="ci_${item.id}">
         <div class="checkbox ${st==='checked'?'ck':''}" onclick="toggleCk('${item.id}')"></div>
         <div class="ci-body">
           <div class="ci-top"><span class="ci-lbl">${item.text}</span><span class="pts">+${item.pts}pts</span></div>
           ${h?`<div class="ci-hist">↩ ${h}</div>`:''}
           <div class="ci-bottom">
-            <input class="remark" type="text" placeholder="Add site remark..." value="${esc(cm)}" onchange="saveCm('${item.id}',this.value)">
+            <input class="remark" type="text" placeholder="Add site remark..." value="${esc(cm)}" oninput="setRemarkDraft('${item.id}',this.value)" onchange="saveCm('${item.id}',this.value)" onblur="saveCm('${item.id}',this.value)">
             <button class="na-btn ${st==='na'?'on':''}" onclick="toggleNA('${item.id}')">N/A</button>
             <button class="ci-edit" onclick="event.stopPropagation();editChecklistItem('${k}','${item.id}')">Edit Item</button>
             <button class="ci-del" onclick="event.stopPropagation();deleteChecklistItem('${k}','${item.id}')">Delete Item</button>
@@ -1638,7 +1649,7 @@ function getHist(id,cid){
 function toggleSect(k){const b=document.getElementById('cb_'+k),c=document.getElementById('cv_'+k);if(!b)return;if(b.style.display==='none'){b.style.display='';c.classList.add('open')}else{b.style.display='none';c.classList.remove('open')}}
 function toggleCk(id){const day=getDay(curDay);if(!day)return;if(!day.checks)day.checks={};if(day.checks[id]==='checked')delete day.checks[id];else day.checks[id]='checked';save();renderMain();renderSidebar()}
 function toggleNA(id){const day=getDay(curDay);if(!day)return;if(!day.checks)day.checks={};if(day.checks[id]==='na')delete day.checks[id];else day.checks[id]='na';save();renderMain()}
-function saveCm(id,v){const day=getDay(curDay);if(!day)return;if(!day.comments)day.comments={};day.comments[id]=v;save()}
+function saveCm(id,v){const day=getDay(curDay);if(!day)return;if(!day.comments)day.comments={};day.comments[id]=v;setRemarkDraft(id,v);save()}
 async function handleUpload(e){
   const day=getDay(curDay);if(!day)return;
   if(!day.media)day.media=[];
