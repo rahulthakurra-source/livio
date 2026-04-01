@@ -572,8 +572,6 @@ const EMBED_PARAMS = (window.__TRACKER_EMBED_PARAMS__ && typeof window.__TRACKER
   : {};
 const PROJECT_ID = query.get('projectId') || EMBED_PARAMS.projectId || 'standalone';
 const BACKEND_URL_PARAM = query.get('backendUrl') || EMBED_PARAMS.backendUrl || '';
-const LEGACY_OWNER_KEY = 'dt_legacy_owner_project_v1';
-const scopedKey = key => `${key}__${PROJECT_ID}`;
 const clone = value => JSON.parse(JSON.stringify(value));
 
 function parseStore(raw, fallback){
@@ -907,33 +905,11 @@ async function saveMediaFile(day, file, categoryKey, categoryLabel){
   day.media.push(buildLocalMediaItem(file, dataUrl, categoryKey, categoryLabel));
 }
 
-function adoptLegacyProjectData(){
-  const owner = localStorage.getItem(LEGACY_OWNER_KEY);
-  const legacyDaysRaw = localStorage.getItem('dt_days');
-  const legacyDiscRaw = localStorage.getItem('dt_disc');
-  if(owner || (!legacyDaysRaw && !legacyDiscRaw)) return;
-
-  if(legacyDaysRaw){
-    localStorage.setItem(scopedKey('dt_days'), legacyDaysRaw);
-  }
-  if(legacyDiscRaw){
-    localStorage.setItem(scopedKey('dt_disc'), legacyDiscRaw);
-  }
-  localStorage.setItem(LEGACY_OWNER_KEY, PROJECT_ID);
-}
-
-adoptLegacyProjectData();
-
 const parentTrackerState = getParentTrackerState();
-const localDays = parseStore(localStorage.getItem(scopedKey('dt_days')), []);
-const localDiscItems = parseStore(
-  localStorage.getItem(scopedKey('dt_disc')),
-  PROJECT_ID === 'standalone' ? clone(DISC_SEED) : []
-);
-let days = Array.isArray(parentTrackerState?.days) ? clone(parentTrackerState.days) : localDays;
+let days = Array.isArray(parentTrackerState?.days) ? clone(parentTrackerState.days) : [];
 let discItems = Array.isArray(parentTrackerState?.discItems)
   ? clone(parentTrackerState.discItems)
-  : localDiscItems;
+  : (PROJECT_ID === 'standalone' ? clone(DISC_SEED) : []);
 let curDay = null;
 let editingDayId = null;
 let curDiscId = null;
@@ -980,8 +956,6 @@ function flushTrackerBackendSync(){
 }
 
 const save = () => {
-  localStorage.setItem(scopedKey('dt_days'),JSON.stringify(days));
-  localStorage.setItem(scopedKey('dt_disc'),JSON.stringify(discItems));
   saveParentTrackerState();
   queueTrackerBackendSync(250);
 };

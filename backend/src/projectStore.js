@@ -11,11 +11,13 @@ const PROJECT_DATA_DEFAULTS = {
   inspections: [],
   invoices: [],
   vendors: [],
+  vendorProfiles: [],
   clientContracts: [],
   clientInvoices: [],
   checklist: [],
   qaqcLog: [],
   chkCategories: [],
+  attachments: [],
 };
 
 const META_KEYS = [
