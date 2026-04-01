@@ -1911,10 +1911,45 @@ function setRemoteProjectIds(projects){
     if(project&&project.id&&!isDeprecatedProject(project)) REMOTE_PROJECT_IDS.add(project.id);
   });
 }
+function normalizeOneProject(p){
+  if(!p.dailyTracker||typeof p.dailyTracker!=='object') p.dailyTracker={days:[],discItems:[]};
+  if(!p.works)p.works=[];
+  if(!p.milestones)p.milestones=[];
+  if(!p.quotes)p.quotes=[];
+  if(!p.plans)p.plans=[];
+  if(!p.inspections)p.inspections=[];
+  p.milestones.forEach(m=>{
+    if(!m.payFiles)m.payFiles=[];
+    if(!m.progressPayments)m.progressPayments=[];
+    m.progressPayments.forEach(pp=>{if(!pp.files)pp.files=[];});
+  });
+  p.quotes.forEach(q=>{
+    if(!q.files)q.files=[];
+    if(!q.payMilestones){q.payMilestones=q.paymilestones||q.paymentMilestones||[];delete q.paymilestones;delete q.paymentMilestones;}
+    q.payMilestones.forEach(pm=>{if(!pm.files)pm.files=[];if(!pm.lienFiles)pm.lienFiles=[];if(pm.paid===undefined)pm.paid=false;if(!pm.paidDate)pm.paidDate='';});
+  });
+  p.inspections.forEach(i=>{if(!i.files)i.files=[];});
+  if(!p.invoices)p.invoices=[];
+  if(!p.vendors)p.vendors=[];
+  if(!p.vendorProfiles)p.vendorProfiles=[];
+  if(!p.clientContracts)p.clientContracts=[];
+  if(!p.clientInvoices)p.clientInvoices=[];
+  if(!p.checklist)p.checklist=[];
+  if(!p.qaqcLog)p.qaqcLog=[];
+  if(!p.chkCategories)p.chkCategories=[];
+  (p.checklist||[]).forEach(it=>{(it.comments||[]).forEach(c=>regFiles(c.files||[]));});
+  (p.qaqcLog||[]).forEach(it=>regFiles(it.files||[]));
+  (p.checklist||[]).forEach(it=>{if(!it.comments)it.comments=[];});
+  p.vendors.forEach(v=>regFiles(v.files||[]));
+  p.clientContracts.forEach(c=>regFiles(c.files||[]));
+  p.clientInvoices.forEach(i=>regFiles(i.files||[]));
+  p.invoices.forEach(inv=>{if(!inv.files)inv.files=[];});
+  return p;
+}
 function upsertLocalProject(project){
   if(!project||!project.id) return;
   if(isDeprecatedProject(project)) return null;
-  const normalized=normalizeDB({projects:[project],activeId:project.id}).projects[0];
+  const normalized=normalizeOneProject(JSON.parse(JSON.stringify(project)));
   if(!normalized||!normalized.id) return null;
   const idx=(DB.projects||[]).findIndex(x=>x.id===normalized.id);
   if(idx>-1) DB.projects[idx]=normalized;
