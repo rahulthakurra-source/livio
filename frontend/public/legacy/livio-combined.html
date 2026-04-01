@@ -1519,10 +1519,11 @@ function normalizeDB(input){
     (p.checklist||[]).forEach(it=>{(it.comments||[]).forEach(c=>regFiles(c.files||[]));});
     (p.qaqcLog||[]).forEach(it=>regFiles(it.files||[]));
     (p.checklist||[]).forEach(it=>{if(!it.comments)it.comments=[];});
-    p.vendors.forEach(v=>regFiles(v.files||[]));
-    p.clientContracts.forEach(c=>regFiles(c.files||[]));
-    p.clientInvoices.forEach(i=>regFiles(i.files||[]));
-    p.invoices.forEach(inv=>{if(!inv.files)inv.files=[];});
+    p.vendors.forEach(v=>{if(!v.files)v.files=[];regFiles(v.files);});
+    p.clientContracts.forEach(c=>{if(!c.files)c.files=[];regFiles(c.files);});
+    p.clientInvoices.forEach(i=>{if(!i.files)i.files=[];if(!i.partialPayments)i.partialPayments=[];regFiles(i.files);});
+    p.invoices.forEach(inv=>{if(!inv.files)inv.files=[];if(!inv.proofFiles)inv.proofFiles=[];if(!inv.lienFiles)inv.lienFiles=[];if(!inv.partialPayments)inv.partialPayments=[];});
+    if(!p.attachments)p.attachments=[];
   });
   return db;
 }
@@ -1946,10 +1947,11 @@ function normalizeOneProject(p){
   (p.checklist||[]).forEach(it=>{(it.comments||[]).forEach(c=>regFiles(c.files||[]));});
   (p.qaqcLog||[]).forEach(it=>regFiles(it.files||[]));
   (p.checklist||[]).forEach(it=>{if(!it.comments)it.comments=[];});
-  p.vendors.forEach(v=>regFiles(v.files||[]));
-  p.clientContracts.forEach(c=>regFiles(c.files||[]));
-  p.clientInvoices.forEach(i=>regFiles(i.files||[]));
-  p.invoices.forEach(inv=>{if(!inv.files)inv.files=[];});
+  p.vendors.forEach(v=>{if(!v.files)v.files=[];regFiles(v.files);});
+  p.clientContracts.forEach(c=>{if(!c.files)c.files=[];regFiles(c.files);});
+  p.clientInvoices.forEach(i=>{if(!i.files)i.files=[];if(!i.partialPayments)i.partialPayments=[];regFiles(i.files);});
+  p.invoices.forEach(inv=>{if(!inv.files)inv.files=[];if(!inv.proofFiles)inv.proofFiles=[];if(!inv.lienFiles)inv.lienFiles=[];if(!inv.partialPayments)inv.partialPayments=[];});
+  if(!p.attachments)p.attachments=[];
   return p;
 }
 function upsertLocalProject(project){
@@ -4477,7 +4479,7 @@ async function saveModal(){
     const color=document.querySelector('.cswatch.sel')?.dataset.color||COLORS[0];
     const street=vVal('f-street'),city=vVal('f-city'),state=vVal('f-state'),zip=vVal('f-zip'),county=vVal('f-county');
     const address=[street,city,state,zip].filter(Boolean).join(', ');
-    const o={id:mId||('proj_'+uid()),name,clientOwnerName:vVal('f-client-owner'),clientOwnerEmail:vVal('f-client-owner-email'),street,city,county,state,zip,address,permit:vVal('f-permit'),apn:vVal('f-apn'),type:vVal('f-type'),color,works:[],milestones:[],quotes:[],plans:[],inspections:[],invoices:[],vendors:[],vendorProfiles:[],clientContracts:[],clientInvoices:[],checklist:[],qaqcLog:[],dailyTracker:{days:[],discItems:[]}};
+    const o={id:mId||('proj_'+uid()),name,clientOwnerName:vVal('f-client-owner'),clientOwnerEmail:vVal('f-client-owner-email'),street,city,county,state,zip,address,permit:vVal('f-permit'),apn:vVal('f-apn'),type:vVal('f-type'),color,works:[],milestones:[],quotes:[],plans:[],inspections:[],invoices:[],vendors:[],vendorProfiles:[],clientContracts:[],clientInvoices:[],checklist:[],qaqcLog:[],attachments:[],dailyTracker:{days:[],discItems:[]}};
     if(mId){const idx=DB.projects.findIndex(x=>x.id===mId);if(idx>-1){['works','milestones','quotes','plans','inspections','invoices','vendors','vendorProfiles','clientContracts','clientInvoices','checklist','qaqcLog','chkCategories','dailyTracker','attachments'].forEach(k=>o[k]=DB.projects[idx][k]);DB.projects[idx]=o;}}
     else{DB.projects.push(o);DB.activeId=o.id;}
 
@@ -4602,7 +4604,7 @@ async function saveModal(){
     const amt=parseFloat(vVal('f-inv-amt'))||0; if(!amt){toast('⚠ Amount required');return;}
     const ex=mId?(p.invoices||[]).find(x=>x.id===mId):null;
     const milestoneId=vVal('f-inv-milestone')||'';
-    const o={id:mId||uid(),vendorProfileId,vendor:vendorName,quoteId:qid,vcId,isManual:isManual||false,manualScope:manualScope||'',milestoneId,invoiceNo:invNo,amount:amt,invoiceDate:vVal('f-inv-date'),dueDate:vVal('f-inv-due'),description:vVal('f-inv-desc'),approvalStatus:ex?ex.approvalStatus:'pending',paid:ex?ex.paid:false,paidDate:ex?ex.paidDate:'',partialPayments:ex?ex.partialPayments||[]:[],files:ex?ex.files||[]:[],lienFiles:ex?ex.lienFiles||[]:[],};
+    const o={id:mId||uid(),vendorProfileId,vendor:vendorName,quoteId:qid,vcId,isManual:isManual||false,manualScope:manualScope||'',milestoneId,invoiceNo:invNo,amount:amt,invoiceDate:vVal('f-inv-date'),dueDate:vVal('f-inv-due'),description:vVal('f-inv-desc'),approvalStatus:ex?ex.approvalStatus:'pending',paid:ex?ex.paid:false,paidDate:ex?ex.paidDate:'',partialPayments:ex?ex.partialPayments||[]:[],files:ex?ex.files||[]:[],lienFiles:ex?ex.lienFiles||[]:[],proofFiles:ex?ex.proofFiles||[]:[],};
     if(!p.invoices)p.invoices=[]; if(!p.vendors)p.vendors=[]; if(!p.checklist)p.checklist=[]; if(!p.qaqcLog)p.qaqcLog=[]; if(!p.chkCategories)p.chkCategories=[]; (p.checklist||[]).forEach(it=>{(it.comments||[]).forEach(c=>regFiles(c.files||[]));}); (p.qaqcLog||[]).forEach(it=>regFiles(it.files||[])); (p.checklist||[]).forEach(it=>{if(!it.comments)it.comments=[];});
     if(mId){const i=p.invoices.findIndex(x=>x.id===mId);if(i>-1)p.invoices[i]=o;}else p.invoices.push(o);
     saveDB();
