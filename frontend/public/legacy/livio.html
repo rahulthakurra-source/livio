@@ -1468,8 +1468,14 @@ function normalizeDB(input){
   db.projects = (db.projects||[]).filter(p=>p && !isDeprecatedProject(p));
   const hasOnlyMadera=db.projects.length===1&&db.projects[0]&&db.projects[0].id==='proj_madera';
   if(hasOnlyMadera){
-    db.projects=cloneCoreProjects();
-    db.activeId='proj_madera';
+    const p0=db.projects[0];
+    const hasUserData=['works','milestones','quotes','plans','inspections','invoices','vendors','vendorProfiles','clientContracts','clientInvoices','checklist','qaqcLog'].every(
+      k=>!Array.isArray(p0[k])||p0[k].length===0
+    );
+    if(hasUserData){
+      db.projects=cloneCoreProjects();
+      db.activeId='proj_madera';
+    }
   }
   if(DEPRECATED_PROJECT_IDS.has(db.activeId)) db.activeId='proj_madera';
   if(!(db.projects||[]).some(p=>p&&p.id===db.activeId)) db.activeId=db.projects[0]?.id||'proj_madera';
@@ -4471,7 +4477,7 @@ async function saveModal(){
     const street=vVal('f-street'),city=vVal('f-city'),state=vVal('f-state'),zip=vVal('f-zip'),county=vVal('f-county');
     const address=[street,city,state,zip].filter(Boolean).join(', ');
     const o={id:mId||('proj_'+uid()),name,clientOwnerName:vVal('f-client-owner'),clientOwnerEmail:vVal('f-client-owner-email'),street,city,county,state,zip,address,permit:vVal('f-permit'),apn:vVal('f-apn'),type:vVal('f-type'),color,works:[],milestones:[],quotes:[],plans:[],inspections:[],invoices:[],vendors:[],vendorProfiles:[],clientContracts:[],clientInvoices:[],checklist:[],qaqcLog:[],dailyTracker:{days:[],discItems:[]}};
-    if(mId){const idx=DB.projects.findIndex(x=>x.id===mId);if(idx>-1){['works','milestones','quotes','plans','inspections','invoices','vendors','vendorProfiles','clientContracts','clientInvoices','checklist','qaqcLog','chkCategories','dailyTracker'].forEach(k=>o[k]=DB.projects[idx][k]);DB.projects[idx]=o;}}
+    if(mId){const idx=DB.projects.findIndex(x=>x.id===mId);if(idx>-1){['works','milestones','quotes','plans','inspections','invoices','vendors','vendorProfiles','clientContracts','clientInvoices','checklist','qaqcLog','chkCategories','dailyTracker','attachments'].forEach(k=>o[k]=DB.projects[idx][k]);DB.projects[idx]=o;}}
     else{DB.projects.push(o);DB.activeId=o.id;}
 
   } else if(mMode==='work'&&p){
