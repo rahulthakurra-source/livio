@@ -252,6 +252,7 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
   const [tracker, setTracker] = useState(() => normalizeTrackerState(project.dailyTracker));
   const [selectedDayId, setSelectedDayId] = useState("");
   const [selectedDiscussionId, setSelectedDiscussionId] = useState("");
+  const [remarkDrafts, setRemarkDrafts] = useState({});
   const [sideView, setSideView] = useState("days");
   const [dayTab, setDayTab] = useState("checklist");
   const [daySearch, setDaySearch] = useState("");
@@ -266,6 +267,11 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
     setSelectedDayId((current) => current || nextTracker.days[0]?.id || "");
     setSelectedDiscussionId((current) => current || nextTracker.discussions[0]?.id || "");
   }, [project]);
+
+  useEffect(() => {
+    const day = tracker.days.find((entry) => entry.id === selectedDayId);
+    setRemarkDrafts(day?.comments && typeof day.comments === "object" ? { ...day.comments } : {});
+  }, [project.id, selectedDayId]);
 
   const selectedDay = tracker.days.find((day) => day.id === selectedDayId) || null;
   const selectedDiscussion =
@@ -614,6 +620,13 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
         ...(day.comments || {}),
         [itemId]: value,
       },
+    }));
+  }
+
+  function updateRemarkDraft(itemId, value) {
+    setRemarkDrafts((current) => ({
+      ...current,
+      [itemId]: value,
     }));
   }
 
@@ -1127,7 +1140,10 @@ export function DailyTrackerPage({ project, onSaveProject, user }) {
                                     <input
                                       className="tracker-remark"
                                       placeholder="Add site remark"
-                                      defaultValue={selectedDay.comments?.[item.id] || ""}
+                                      value={remarkDrafts[item.id] ?? ""}
+                                      onChange={(event) =>
+                                        updateRemarkDraft(item.id, event.target.value)
+                                      }
                                       onBlur={(event) => saveRemark(item.id, event.target.value)}
                                     />
                                   </div>

@@ -2283,6 +2283,7 @@ async function refreshActiveProjectFromSupabase(options={}){
   const client=initSupabaseClient();
   const projectId=proj()?.id||DB.activeId||'';
   if(!client||!projectId||dailyTrackerRefreshInFlight) return false;
+  if(!options.force&&hasActiveEditSession()) return false;
   dailyTrackerRefreshInFlight=true;
   try{
     const data=await backendRequest('/projects/'+encodeURIComponent(projectId));
@@ -2317,6 +2318,30 @@ function scheduleDailyTrackerAutoRefresh(){
     if(document.hidden) return;
     refreshActiveProjectFromSupabase({silent:true});
   },8000);
+}
+function isEditableElement(el){
+  if(!el) return false;
+  if(el.isContentEditable) return true;
+  const tag=String(el.tagName||'').toUpperCase();
+  if(tag==='TEXTAREA'||tag==='SELECT') return !el.disabled;
+  if(tag!=='INPUT') return false;
+  const type=String(el.type||'text').toLowerCase();
+  return !el.disabled&&!['button','submit','reset','checkbox','radio','color','range','file','hidden'].includes(type);
+}
+function frameHasActiveEdit(frame){
+  try{
+    const doc=frame?.contentDocument;
+    if(!doc) return false;
+    if(doc.querySelector('.dialog-backdrop,.tracker-comment-form:focus-within')) return true;
+    return isEditableElement(doc.activeElement);
+  }catch(_err){
+    return false;
+  }
+}
+function hasActiveEditSession(){
+  if(document.querySelector('.mo.open')) return true;
+  if(isEditableElement(document.activeElement)) return true;
+  return frameHasActiveEdit(vEl('daily-tracker-frame'));
 }
 function scheduleSupabasePush(){
   markLocalAppStateSaved();
@@ -7864,7 +7889,7 @@ bootstrapSupabase().finally(()=>{
 document.addEventListener('visibilitychange',()=>{
   if(!document.hidden&&CURRENT_USER){
     const client=initSupabaseClient();
-    if(client) backendRequest('/bootstrap').then(data=>{applyAppSnapshot(data);}).catch(()=>{});
+    if(client&&!hasActiveEditSession()) backendRequest('/bootstrap').then(data=>{applyAppSnapshot(data);}).catch(()=>{});
   }
 });
 
