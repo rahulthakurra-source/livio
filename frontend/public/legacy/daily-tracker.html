@@ -610,7 +610,7 @@ function saveParentTrackerState(){
       window.parent.saveDB();
       return true;
     }
-  }catch(_err){}
+  }catch(err){ console.error('saveParentTrackerState error:',err); }
   return false;
 }
 
@@ -981,8 +981,15 @@ function flushTrackerBackendSync(){
 }
 
 const save = () => {
-  localStorage.setItem(scopedKey('dt_days'),JSON.stringify(days));
-  localStorage.setItem(scopedKey('dt_disc'),JSON.stringify(discItems));
+  try{
+    localStorage.setItem(scopedKey('dt_days'),JSON.stringify(days));
+    localStorage.setItem(scopedKey('dt_disc'),JSON.stringify(discItems));
+  }catch(e){
+    console.error('localStorage save failed:',e);
+    if(e.name==='QuotaExceededError'||e.code===22){
+      showTrackerSaveWarning('Local storage full – only remote sync active.');
+    }
+  }
   saveParentTrackerState();
   queueTrackerBackendSync(250);
 };
@@ -1819,7 +1826,25 @@ document.addEventListener('visibilitychange',()=>{
   if(document.hidden) flushTrackerBackendSync();
 });
 window.addEventListener('pagehide',()=>{ flushTrackerBackendSync(); });
-window.addEventListener('beforeunload',()=>{ flushTrackerBackendSync(); });
+window.addEventListener('beforeunload',function(){
+  if(trackerSyncTimer){
+    clearTimeout(trackerSyncTimer);
+    const backendUrl=getBackendBaseUrl();
+    if(backendUrl&&PROJECT_ID&&PROJECT_ID!=='standalone'){
+      const payload=JSON.stringify({
+        days:days,
+        discItems:discItems,
+        updatedAt:new Date().toISOString()
+      });
+      navigator.sendBeacon&&navigator.sendBeacon(
+        backendUrl+'/api/tracker-flush/'+encodeURIComponent(PROJECT_ID),
+        new Blob([payload],{type:'application/json'})
+      );
+    }
+  }else{
+    flushTrackerBackendSync();
+  }
+});
 document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
 renderSidebar();
 renderDiscSidebar();

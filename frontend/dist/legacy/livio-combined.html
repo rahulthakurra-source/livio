@@ -1557,7 +1557,7 @@ function getLocalSnapshotSavedAt(){
   const snapshot=readLocalAppSnapshot();
   return String(snapshot&&snapshot.savedAt||'').trim();
 }
-function saveDB(){
+async function saveDB(){
   try{
     DB=normalizeDB(DB);
     writeLocalDBCache(DB);
@@ -1571,7 +1571,7 @@ function saveDB(){
   }
   registerAllFiles();
   const activeProjectId=proj()?.id||DB.activeId||'';
-  if(activeProjectId) syncProjectToSupabase(activeProjectId,true);
+  if(activeProjectId) await syncProjectToSupabase(activeProjectId,true);
   scheduleSupabasePush();
 }
 function registerAllFiles(){
@@ -2000,6 +2000,7 @@ function queueProjectSync(task){
     .then(()=>task());
   projectSyncChain=run.catch(error=>{
     console.error('project sync error:',error);
+    toast('⚠ Project sync failed: '+(error?.message||'Unknown error'));
     return null;
   });
   return run;
@@ -2258,6 +2259,8 @@ async function pushToSupabase(silent=false){
     if(!silent){
       setSupabaseStatus('Push failed: '+e.message,'err');
       toast('Backend push failed');
+    }else{
+      console.error('pushToSupabase silent failure:',e);
     }
     return false;
   }
@@ -2324,7 +2327,7 @@ function scheduleSupabasePush(){
   const cfg=getSupabaseConfig();
   if(!normalizeApiBase(cfg.url)) return;
   if(supabasePushTimer) clearTimeout(supabasePushTimer);
-  supabasePushTimer=setTimeout(()=>{ syncAppStateToSupabase(true); },300);
+  supabasePushTimer=setTimeout(()=>{ syncAppStateToSupabase(true).catch(err=>{ console.error('Supabase push error:',err); toast('⚠ Background sync failed'); }); },300);
 }
 async function bootstrapSupabase(){
   populateSupabaseInputs();
@@ -4784,7 +4787,7 @@ async function saveModal(){
     if(pm) pm.lienFiles=[...mPending];
   }
 
-  saveDB(); closeModal(); renderAll(); toast('✓ Saved');
+  await saveDB(); closeModal(); renderAll(); toast('✓ Saved');
   if(autoClientInvoiceId) await emailClientInvoice(autoClientInvoiceId,{silentAuto:true});
 }
 
@@ -7873,6 +7876,13 @@ document.addEventListener('visibilitychange',()=>{
 setInterval(()=>{
   if(!document.hidden&&CURRENT_USER) refreshActiveProjectFromSupabase({silent:true});
 },30000);
+
+window.addEventListener('beforeunload',function(e){
+  if(supabasePushTimer){
+    clearTimeout(supabasePushTimer);
+    syncAppStateToSupabase(true);
+  }
+});
 </script>
 </body>
 </html>
