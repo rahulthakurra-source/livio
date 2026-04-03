@@ -426,6 +426,7 @@ tr:hover .row-actions{opacity:1}
     <li data-page="vendorprofiles"><a id="n-vendorprofiles" onclick="nav('vendorprofiles')"><span class="ic">VD</span>Vendor Directory   <span class="ct" id="ct-vp">0</span></a></li>
     <li data-page="clientcontracts"><a id="n-clientcontracts" onclick="nav('clientcontracts')"><span class="ic">CC</span>Client Contracts   <span class="ct" id="ct-cc">0</span></a></li>
     <li data-page="clientinvoices"><a id="n-clientinvoices" onclick="nav('clientinvoices')"><span class="ic">CI</span>Client Invoices   <span class="ct" id="ct-ci">0</span></a></li>
+    <li data-page="momentum"><a id="n-momentum" onclick="nav('momentum')"><span class="ic">🚀</span>Momentum</a></li>
   </ul>
   <div class="sb-sec">CA Codes</div>
   <div class="sb-codes" style="display:flex;flex-wrap:wrap;gap:4px;padding:0 14px 12px">
@@ -858,6 +859,16 @@ tr:hover .row-actions{opacity:1}
         <div style="padding:16px"><p style="font-size:13px;color:var(--muted);margin-bottom:10px">Restore a previously exported JSON backup.</p>
           <label class="btn btn-ghost" style="cursor:pointer">📂 Choose JSON File<input type="file" accept=".json" onchange="importJSON(this)" style="display:none"></label>
         </div>
+      </div>
+    </div>
+
+    <!-- ── MOMENTUM ── -->
+    <div class="page" id="pg-momentum">
+      <div class="sh"><div><div class="sh-title">Momentum</div><div class="sh-sub">Track project progress and team momentum</div></div></div>
+      <div class="panel" style="padding:24px;text-align:center;color:var(--muted)">
+        <div style="font-size:48px;margin-bottom:12px">🚀</div>
+        <div style="font-size:18px;font-weight:700;color:var(--fg);margin-bottom:8px">Momentum</div>
+        <div style="font-size:13px">Coming soon — your project momentum dashboard.</div>
       </div>
     </div>
 
@@ -2369,7 +2380,7 @@ async function bootstrapSupabase(){
 //  NAVIGATION
 // ══════════════════════════════════════════════════════════════════
 let curPage = 'projects';
-const PAGE_TITLES = {projects:'All Projects',dailytracker:'Daily Tracker',dashboard:'Dashboard Overview',works:'Works at Site',milestones:'Project Milestones',quotes:'Quotes Received',plans:'Plans & Documents',inspections:'Inspections Scheduled',payments:'Payments',invoices:'Invoice Tracker',vendorprofiles:'Vendor Directory',vendors:'Vendor Contracts',clientcontracts:'Client Contracts',clientinvoices:'Client Invoices',checklist:'Project Checklist',qaqc:'QA/QC Log',compliance:'Compliance Tracker',export:'Export & Download'};
+const PAGE_TITLES = {projects:'All Projects',dailytracker:'Daily Tracker',dashboard:'Dashboard Overview',works:'Works at Site',milestones:'Project Milestones',quotes:'Quotes Received',plans:'Plans & Documents',inspections:'Inspections Scheduled',payments:'Payments',invoices:'Invoice Tracker',vendorprofiles:'Vendor Directory',vendors:'Vendor Contracts',clientcontracts:'Client Contracts',clientinvoices:'Client Invoices',checklist:'Project Checklist',qaqc:'QA/QC Log',compliance:'Compliance Tracker',export:'Export & Download',momentum:'Momentum'};
 const NEEDS_PROJECT = ['dailytracker','dashboard','works','milestones','quotes','plans','inspections','payments','invoices','vendorprofiles','vendors','clientcontracts','clientinvoices','checklist','qaqc','compliance','export'];
 
 function buildSidebarNav(){
@@ -2397,7 +2408,7 @@ function nav(page) {
   document.querySelectorAll('.sb-nav a').forEach(a=>a.classList.remove('on'));
   vEl('n-'+page)?.classList.add('on');
   vEl('page-title').textContent = PAGE_TITLES[page]||page;
-  const addMap = {projects:'+ New Project',dailytracker:'',works:'+ Add Work',milestones:'+ Add Milestone',quotes:'+ Add Quote',plans:'+ Upload Doc',inspections:'+ Add Inspection',payments:'',invoices:'',vendorprofiles:'',vendors:'',clientcontracts:'',clientinvoices:'',checklist:'',qaqc:'',compliance:'',export:''};
+  const addMap = {projects:'+ New Project',dailytracker:'',works:'+ Add Work',milestones:'+ Add Milestone',quotes:'+ Add Quote',plans:'+ Upload Doc',inspections:'+ Add Inspection',payments:'',invoices:'',vendorprofiles:'',vendors:'',clientcontracts:'',clientinvoices:'',checklist:'',qaqc:'',compliance:'',export:'',momentum:''};
   const addModal = {projects:'project',works:'work',milestones:'milestone',quotes:'quote',plans:'plan',inspections:'inspection'};
   const btn=vEl('add-btn');
   if(addMap[page]){btn.style.display=''; btn.textContent=addMap[page]; btn.onclick=()=>openModal(addModal[page]);}
@@ -7253,7 +7264,8 @@ const ALL_PAGES=[
   {id:'clientinvoices',label:'Client Invoices'},
   {id:'invoices',label:'Invoices'},{id:'payments',label:'Payments'},
   {id:'checklist',label:'Checklist'},{id:'qaqc',label:'QA/QC'},
-  {id:'compliance',label:'Compliance'},{id:'export',label:'Export'}
+  {id:'compliance',label:'Compliance'},{id:'export',label:'Export'},
+  {id:'momentum',label:'Momentum'}
 ];
 
 function getPerms(){
