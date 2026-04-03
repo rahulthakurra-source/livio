@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api.js";
 import { normalizeProject } from "./projectModel.js";
 import { DailyTrackerPage } from "./pages/DailyTrackerPage.jsx";
+import { MomentumPage } from "./pages/MomentumPage.jsx";
 
 function DailyTrackerStandalone() {
   const params = new URLSearchParams(window.location.search);
@@ -75,6 +76,10 @@ export default function App() {
   const params = new URLSearchParams(window.location.search);
   if (params.get("view") === "daily-tracker-react") {
     return <DailyTrackerStandalone />;
+  }
+
+  if (params.get("view") === "momentum") {
+    return <MomentumPage />;
   }
 
   const legacyVersion = "2026-03-31-legacy-combined";

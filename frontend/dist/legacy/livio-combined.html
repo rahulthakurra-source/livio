@@ -863,12 +863,14 @@ tr:hover .row-actions{opacity:1}
     </div>
 
     <!-- ── MOMENTUM ── -->
-    <div class="page" id="pg-momentum">
-      <div class="sh"><div><div class="sh-title">Momentum</div><div class="sh-sub">Track project progress and team momentum</div></div></div>
-      <div class="panel" style="padding:24px;text-align:center;color:var(--muted)">
-        <div style="font-size:48px;margin-bottom:12px">🚀</div>
-        <div style="font-size:18px;font-weight:700;color:var(--fg);margin-bottom:8px">Momentum</div>
-        <div style="font-size:13px">Coming soon — your project momentum dashboard.</div>
+    <div class="page page-full" id="pg-momentum">
+      <div class="panel tracker-panel">
+        <iframe
+          id="momentum-frame"
+          class="tracker-frame"
+          src="/?view=momentum"
+          title="Momentum"
+        ></iframe>
       </div>
     </div>
 

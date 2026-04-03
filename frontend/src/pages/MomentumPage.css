@@ -1,0 +1,168 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&family=DM+Mono:wght@400;500&display=swap');
+
+#momentum-app *,#momentum-app *::before,#momentum-app *::after{box-sizing:border-box;margin:0;padding:0}
+#momentum-app{
+  --bg:#0e0f11;--bg2:#16181c;--bg3:#1e2126;--bg4:#252930;--bg5:#2e333b;
+  --border:#2e333b;--border2:#3a4049;
+  --text:#e8eaed;--text2:#9aa0ab;--text3:#636b77;
+  --accent:#2dd4a0;--accent2:#1aab7c;--accent-dim:#0d2e22;
+  --blue:#4da6f5;--blue-dim:#0d2040;
+  --amber:#f5a623;--amber-dim:#2e1e05;
+  --red:#f56565;--red-dim:#2e0f0f;
+  --purple:#a78bfa;--purple-dim:#1a1430;
+  --green:#68d391;
+  --r:8px;--rl:12px;--rxl:16px;
+  --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
+  --sw:220px;--hh:52px;
+  height:100vh;width:100vw;font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;overflow:hidden;display:flex;
+}
+#momentum-app #app{display:flex;height:100vh;width:100%}
+#momentum-app #sb{width:var(--sw);background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+#momentum-app #main{flex:1;display:flex;flex-direction:column;min-width:0}
+#momentum-app #hdr{height:var(--hh);background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:10px;flex-shrink:0}
+#momentum-app #content{flex:1;overflow:hidden;position:relative}
+#momentum-app .sb-logo{padding:14px 16px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)}
+#momentum-app .sb-mark{width:28px;height:28px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center}
+#momentum-app .sb-name{font-size:15px;font-weight:600;letter-spacing:-.3px}
+#momentum-app .sb-sec{padding:12px 8px 4px;font-size:10px;font-weight:600;letter-spacing:.08em;color:var(--text3);text-transform:uppercase}
+#momentum-app .sb-list{padding:0 8px;display:flex;flex-direction:column;gap:2px}
+#momentum-app .sb-projects{padding:0 8px;display:flex;flex-direction:column;gap:2px;flex:1;overflow-y:auto}
+#momentum-app .sb-projects::-webkit-scrollbar{width:3px}
+#momentum-app .sb-projects::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+#momentum-app .sb-row{display:flex;align-items:center;border-radius:var(--r)}
+#momentum-app .sb-row:hover .sb-more{opacity:1}
+#momentum-app .sb-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:var(--r);cursor:pointer;color:var(--text2);font-size:13px;transition:all .12s;user-select:none;flex:1;min-width:0}
+#momentum-app .sb-item:hover{background:var(--bg3);color:var(--text)}
+#momentum-app .sb-item.act{background:var(--accent-dim);color:var(--accent)}
+#momentum-app .sb-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+#momentum-app .sb-lbl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#momentum-app .sb-more{opacity:0;width:22px;height:22px;border-radius:4px;border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;transition:all .12s;flex-shrink:0;margin-right:4px;display:flex;align-items:center;justify-content:center}
+#momentum-app .sb-more:hover{background:var(--bg5);color:var(--text)}
+#momentum-app .sb-footer{padding:10px 8px;border-top:1px solid var(--border)}
+#momentum-app .sb-user{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--r);cursor:pointer}
+#momentum-app .sb-user:hover{background:var(--bg3)}
+#momentum-app .av{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;flex-shrink:0}
+#momentum-app .hdr-ttl{font-size:14px;font-weight:600;flex:1}
+#momentum-app .vtabs{display:flex;gap:2px;background:var(--bg3);border-radius:var(--r);padding:3px}
+#momentum-app .vtab{padding:4px 12px;border-radius:6px;border:none;background:transparent;color:var(--text2);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font);transition:all .12s;display:flex;align-items:center;gap:5px}
+#momentum-app .vtab svg{width:12px;height:12px}
+#momentum-app .vtab:hover{color:var(--text)}
+#momentum-app .vtab.act{background:var(--bg5);color:var(--text)}
+#momentum-app .hbtn{display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:var(--r);border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font);transition:all .12s}
+#momentum-app .hbtn:hover{border-color:var(--accent);color:var(--accent)}
+#momentum-app .hbtn.pri{background:var(--accent);border-color:var(--accent);color:#0a1a11;font-weight:600}
+#momentum-app .hbtn.pri:hover{background:var(--accent2)}
+#momentum-app #statsbar{padding:7px 20px;border-bottom:1px solid var(--border);display:flex;gap:18px;background:var(--bg2);flex-shrink:0;overflow-x:auto}
+#momentum-app .st{display:flex;flex-direction:column;flex-shrink:0}
+#momentum-app .st-v{font-size:17px;font-weight:600;font-family:var(--mono);letter-spacing:-.5px}
+#momentum-app .st-l{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em}
+#momentum-app .st-sep{width:1px;background:var(--border);margin:3px 0;align-self:stretch}
+#momentum-app .view{position:absolute;inset:0;overflow:hidden;display:none}
+#momentum-app .view.act{display:flex;flex-direction:column}
+#momentum-app #kb-view{padding:16px;gap:12px;overflow-x:auto;flex-direction:row;align-items:flex-start}
+#momentum-app #kb-view::-webkit-scrollbar{height:5px}
+#momentum-app #kb-view::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+#momentum-app .kb-col{min-width:255px;width:255px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);display:flex;flex-direction:column;max-height:calc(100vh - var(--hh) - 80px)}
+#momentum-app .kb-col-hd{padding:11px 13px 9px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-shrink:0}
+#momentum-app .kb-col-ttl{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+#momentum-app .kb-cnt{background:var(--bg4);color:var(--text3);font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px}
+#momentum-app .kb-cards{padding:7px;display:flex;flex-direction:column;gap:5px;overflow-y:auto;flex:1}
+#momentum-app .kb-cards::-webkit-scrollbar{width:3px}
+#momentum-app .kb-cards::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+#momentum-app .kcard{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 11px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden}
+#momentum-app .kcard::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2.5px;background:var(--cc,transparent)}
+#momentum-app .kcard:hover{border-color:var(--border2);background:var(--bg4);transform:translateY(-1px)}
+#momentum-app .kcard.drag{opacity:.4}
+#momentum-app .kcard-ttl{font-size:12px;font-weight:500;line-height:1.4;margin-bottom:7px}
+#momentum-app .kcard-ft{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+#momentum-app .tag{font-size:10px;font-weight:500;padding:2px 6px;border-radius:8px;white-space:nowrap}
+#momentum-app .t-high{background:var(--red-dim);color:var(--red)}
+#momentum-app .t-med{background:var(--amber-dim);color:var(--amber)}
+#momentum-app .t-low{background:var(--accent-dim);color:var(--accent)}
+#momentum-app .t-feature{background:#1a2040;color:var(--blue)}
+#momentum-app .t-bug{background:var(--red-dim);color:var(--red)}
+#momentum-app .t-design{background:var(--purple-dim);color:var(--purple)}
+#momentum-app .t-infra{background:#1c2210;color:var(--green)}
+#momentum-app .drop-over{border:2px dashed var(--accent)!important;background:var(--accent-dim)!important}
+#momentum-app .kb-add{margin:5px 7px 7px;padding:6px 8px;border-radius:var(--r);border:1px dashed var(--border);background:transparent;color:var(--text3);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:var(--font);width:calc(100% - 14px);transition:all .12s}
+#momentum-app .kb-add:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+#momentum-app .kb-newcol{min-width:190px;border:1.5px dashed var(--border);border-radius:var(--rl);display:flex;align-items:center;justify-content:center;cursor:pointer;height:68px;transition:all .12s}
+#momentum-app .kb-newcol:hover{border-color:var(--accent);background:var(--accent-dim)}
+#momentum-app .kb-newcol span{font-size:12px;color:var(--text3)}
+#momentum-app .kb-newcol:hover span{color:var(--accent)}
+#momentum-app #gt-view{flex-direction:column}
+#momentum-app .gt-bar-row{padding:10px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+#momentum-app .zoom-grp{display:flex;gap:2px;background:var(--bg3);border-radius:var(--r);padding:3px}
+#momentum-app .zbtn{padding:3px 10px;border-radius:5px;border:none;background:transparent;color:var(--text2);font-size:11px;cursor:pointer;font-family:var(--font);transition:all .12s}
+#momentum-app .zbtn:hover{color:var(--text)}
+#momentum-app .zbtn.act{background:var(--bg5);color:var(--text)}
+#momentum-app .gt-scroll{flex:1;overflow:auto}
+#momentum-app .gt-scroll::-webkit-scrollbar{width:5px;height:5px}
+#momentum-app .gt-scroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+#momentum-app .gt-grid{min-width:860px}
+#momentum-app .gt-thead{display:flex;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:10}
+#momentum-app .gt-lc{width:270px;min-width:270px;padding:8px 14px;font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--text3);text-transform:uppercase;border-right:1px solid var(--border)}
+#momentum-app .gt-months{flex:1;display:flex}
+#momentum-app .gt-month{flex:1;padding:8px;font-size:10px;font-weight:600;color:var(--text3);letter-spacing:.05em;text-transform:uppercase;border-right:1px solid var(--border)}
+#momentum-app .gt-row{display:flex;border-bottom:1px solid var(--border);min-height:42px;cursor:pointer;transition:background .1s}
+#momentum-app .gt-row:hover{background:var(--bg3)}
+#momentum-app .gt-row.grp{background:var(--bg2);cursor:default}
+#momentum-app .gt-row.grp:hover{background:var(--bg3)}
+#momentum-app .gt-info{width:270px;min-width:270px;padding:0 14px;display:flex;align-items:center;gap:8px;border-right:1px solid var(--border)}
+#momentum-app .gt-tname{font-size:12px;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#momentum-app .gt-tsub{font-size:10px;color:var(--text3)}
+#momentum-app .gt-tl{flex:1;position:relative;overflow:hidden}
+#momentum-app .gt-bar{position:absolute;top:50%;transform:translateY(-50%);height:18px;border-radius:3px;display:flex;align-items:center;padding:0 6px;min-width:3px;transition:filter .12s}
+#momentum-app .gt-bar:hover{filter:brightness(1.2)}
+#momentum-app .gt-bar-prog{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:rgba(255,255,255,.18)}
+#momentum-app .gt-bar-txt{font-size:10px;font-weight:500;color:rgba(255,255,255,.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative;z-index:1}
+#momentum-app .gt-today{position:absolute;top:0;bottom:0;width:1.5px;background:var(--red);opacity:.5;pointer-events:none;z-index:5}
+#momentum-app .gt-toggle{font-size:10px;color:var(--text3);cursor:pointer;user-select:none;flex-shrink:0}
+#momentum-app .gt-grp-name{font-size:11px;font-weight:600;color:var(--text2);flex:1}
+#momentum-app .gt-ind{padding-left:10px}
+#momentum-app .overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .16s}
+#momentum-app .overlay.open{opacity:1;pointer-events:all}
+#momentum-app .modal{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--rxl);width:440px;max-width:95vw;max-height:88vh;overflow-y:auto;transform:translateY(10px);transition:transform .16s}
+#momentum-app .overlay.open .modal{transform:translateY(0)}
+#momentum-app .modal.sm{width:360px}
+#momentum-app .mhd{padding:18px 18px 0;display:flex;align-items:center;justify-content:space-between}
+#momentum-app .mttl{font-size:15px;font-weight:600}
+#momentum-app .mx{width:26px;height:26px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all .12s}
+#momentum-app .mx:hover{color:var(--text);border-color:var(--border2)}
+#momentum-app .mbody{padding:18px}
+#momentum-app .fg{margin-bottom:14px}
+#momentum-app .fl{font-size:11px;font-weight:600;color:var(--text2);margin-bottom:5px;display:block;letter-spacing:.04em;text-transform:uppercase}
+#momentum-app .fi{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;color:var(--text);font-size:13px;font-family:var(--font);outline:none;transition:border-color .12s}
+#momentum-app .fi:focus{border-color:var(--accent)}
+#momentum-app .fi::placeholder{color:var(--text3)}
+#momentum-app select.fi{cursor:pointer}
+#momentum-app .fr{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#momentum-app .fact{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;align-items:center}
+#momentum-app .btn{padding:7px 14px;border-radius:var(--r);border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font);transition:all .12s}
+#momentum-app .btn:hover{color:var(--text)}
+#momentum-app .btn.pri{background:var(--accent);border-color:var(--accent);color:#0a1a11;font-weight:600}
+#momentum-app .btn.pri:hover{background:var(--accent2)}
+#momentum-app .btn.danger{color:var(--red);border-color:var(--red-dim)}
+#momentum-app .btn.danger:hover{background:var(--red-dim)}
+#momentum-app .swatches{display:flex;gap:7px;flex-wrap:wrap;margin-top:4px}
+#momentum-app .sw{width:18px;height:18px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .1s,border-color .1s}
+#momentum-app .sw:hover{transform:scale(1.2)}
+#momentum-app .sw.sel{border-color:var(--text)}
+#momentum-app .pst-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:4px}
+#momentum-app .pst{background:var(--bg3);border-radius:var(--r);padding:10px;text-align:center}
+#momentum-app .pst-n{font-size:20px;font-weight:600;font-family:var(--mono)}
+#momentum-app .pst-l{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+#momentum-app #momentum-ctx{position:fixed;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--rl);min-width:186px;z-index:500;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+#momentum-app .ci{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--text2);cursor:pointer;transition:background .1s;user-select:none;white-space:nowrap}
+#momentum-app .ci svg{width:13px;height:13px;flex-shrink:0;opacity:.6}
+#momentum-app .ci:hover{background:var(--bg4);color:var(--text)}
+#momentum-app .ci:hover svg{opacity:1}
+#momentum-app .ci.danger:hover{background:var(--red-dim);color:var(--red)}
+#momentum-app .ctx-sep{height:1px;background:var(--border);margin:3px 0}
+#momentum-app .ctx-clrs{padding:8px 12px 10px}
+#momentum-app .ctx-clrs-lbl{font-size:10px;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:7px}
+#momentum-app .ctx-clrs-row{display:flex;gap:6px;flex-wrap:wrap}
+#momentum-app #toast{position:fixed;bottom:20px;right:20px;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r);padding:10px 15px;font-size:13px;display:flex;align-items:center;gap:8px;z-index:700}
+#momentum-app .toast-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0}
+@keyframes fu{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+#momentum-app .kcard,#momentum-app .gt-row{animation:fu .18s ease both}
